@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+chmod +x setup/*.sh
+
 echo "🚀 Instalador Arch Linux"
 
 echo "🌍 Optimizando mirrors (reflector)"
@@ -23,14 +25,14 @@ echo "➡️ Paso 2: Base system"
 "$SCRIPT_DIR/setup/2-base.sh"
 
 echo "➡️ Entrando al chroot"
-arch-chroot /mnt /bin/bash <<EOF
+arch-chroot /mnt
+
 cd /root/setup
 chmod +x *.sh
 ./3-chroot.sh
 ./4-bootloader.sh
 ./5-hardware.sh
 ./6-desktop.sh
-EOF
 
 echo "✅ Instalación completada"
 echo "👉 Ya puedes reiniciar"
