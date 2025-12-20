@@ -4,6 +4,8 @@
 
 set -Eeuo pipefail
 
+pacman -Sy --noconfirm
+
 source /root/setup/install.conf
 
 # =============================

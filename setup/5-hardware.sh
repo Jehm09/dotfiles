@@ -131,38 +131,38 @@ fi
 # =============================
 # Solo se instala si se detecta GPU NVIDIA
 # Preparado para Wayland + Hyprland
-
 if echo "$GPU_INFO" | grep -qi nvidia; then
   echo "🟢 Configurando NVIDIA propietario"
 
-  # Paquetes base NVIDIA
+  # Paquetes DKMS en lugar de nvidia fijo
   pacman -S --noconfirm \
-    nvidia \
+    nvidia-dkms \
     nvidia-utils \
     nvidia-settings
 
-  # Soporte Wayland + DRM
-  echo "⚙️ Configurando módulos NVIDIA"
+  echo "⚙️ Configurando NVIDIA DRM"
 
   cat > /etc/modprobe.d/nvidia.conf <<EOF
-options nvidia_drm modeset=1
+options nvidia-drm modeset=1
 EOF
 
-  # Evita conflictos con nouveau
+  echo "⛔ Bloqueando nouveau"
+
   cat > /etc/modprobe.d/blacklist-nouveau.conf <<EOF
 blacklist nouveau
 options nouveau modeset=0
 EOF
 
-  # Fuerza carga temprana de módulos NVIDIA
-  sed -i 's/^MODULES=.*/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia_drm)/' /etc/mkinitcpio.conf
+  echo "🧱 Configurando initramfs"
 
-  # Regenerar initramfs
+  sed -i 's/^MODULES=.*/MODULES=(nvidia nvidia_modeset nvidia_uvm nvidia-drm)/' /etc/mkinitcpio.conf
+
   mkinitcpio -P
 
 else
   echo "ℹ️ NVIDIA no detectada, omitiendo driver propietario"
 fi
+
 
 # =============================
 # Final
