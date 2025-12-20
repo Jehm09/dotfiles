@@ -4,6 +4,8 @@
 
 set -Eeuo pipefail
 
+source /root/setup/install.conf
+
 # =============================
 # Configuración global
 # =============================
@@ -48,10 +50,6 @@ echo "KEYMAP=$KEYMAP" > /etc/vconsole.conf
 # =============================
 # Hostname y hosts
 # =============================
-
-echo "💻 Configurando hostname"
-read -rp "Ingresa hostname: " HOSTNAME
-
 echo "$HOSTNAME" > /etc/hostname
 
 cat > /etc/hosts <<EOF
@@ -65,17 +63,15 @@ EOF
 # =============================
 
 echo "🔑 Configurando contraseña de root"
-passwd
+echo "root:$PASSWORD" | chpasswd
 
 # =============================
 # Usuario principal
 # =============================
 
 echo "👤 Creando usuario principal"
-read -rp "Ingresa nombre de usuario: " USERNAME
-
 useradd -m -G wheel -s /bin/bash "$USERNAME"
-passwd "$USERNAME"
+echo "$USERNAME:$PASSWORD" | chpasswd
 
 # Habilita sudo para el grupo wheel
 sed -i 's/^# %wheel ALL=(ALL:ALL) ALL/%wheel ALL=(ALL:ALL) ALL/' /etc/sudoers
