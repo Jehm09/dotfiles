@@ -80,7 +80,12 @@ title   Windows Boot Manager
 efi     /EFI/Microsoft/Boot/bootmgfw.efi
 EOF
 else
-  echo "ℹ️ No se detectó Windows"
+  echo "ℹ️ Configurando windows por defecto"
+
+    cat > /boot/loader/entries/windows.conf <<EOF
+title   Windows Boot Manager
+efi     /shellx64.efi
+EOF
 fi
 
 # =============================
