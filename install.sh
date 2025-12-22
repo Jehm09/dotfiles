@@ -69,6 +69,7 @@ chmod +x *.sh
 ./5-hardware.sh
 ./6-desktop.sh
 rm -f install.conf
+cd ..
 rm -rf setup
 EOF
 
