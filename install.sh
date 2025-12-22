@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+LOG_FILE="preinstall.log"
+
+# Redirige stdout y stderr al log y a la consola al mismo tiempo
+# Muy útil para debug si algo falla
+exec > >(tee "$LOG_FILE") 2>&1
+
 chmod +x setup/*.sh
 
 echo "🚀 Instalador Arch Linux"
@@ -63,7 +69,10 @@ chmod +x *.sh
 ./5-hardware.sh
 ./6-desktop.sh
 rm -f install.conf
+rm -rf setup
 EOF
 
+
+echo "📄 Log guardado en $LOG_FILE"
 echo "✅ Instalación completada"
 echo "👉 Ya puedes reiniciar"

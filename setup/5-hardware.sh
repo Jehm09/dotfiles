@@ -136,6 +136,8 @@ if echo "$GPU_INFO" | grep -qi nvidia; then
 
   # Paquetes DKMS en lugar de nvidia fijo
   pacman -S --noconfirm \
+    dkms \
+    libva-nvidia-driver \
     nvidia-dkms \
     nvidia-utils \
     nvidia-settings

@@ -17,11 +17,6 @@ KEYMAP="${KEYMAP:-us}"
 
 EFI_SIZE="1024MiB"
 ROOT_FS="ext4"
-LOG_FILE="preinstall.log"
-
-# Redirige stdout y stderr al log y a la consola al mismo tiempo
-# Muy útil para debug si algo falla
-exec > >(tee "$LOG_FILE") 2>&1
 
 # =============================
 # Checks básicos
@@ -180,4 +175,3 @@ mount "$EFI_PART" /mnt/boot
 
 echo
 echo "✅ Preinstall completado correctamente"
-echo "📄 Log guardado en $LOG_FILE"

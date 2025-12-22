@@ -1,19 +1,16 @@
 #!/usr/bin/env bash
-# Configura systemd-boot como gestor de arranque (UEFI)
-# - Menú visible 10 segundos
-# - Arch Linux
-# - Windows si existe
+# Configura GRUB como bootloader UEFI con soporte dual boot
 
 set -Eeuo pipefail
 
-echo "🚀 Configurando bootloader: systemd-boot"
+echo "🚀 Configurando bootloader: GRUB (UEFI)"
 
 # =============================
 # Checks básicos
 # =============================
 
 [[ -d /sys/firmware/efi ]] || {
-  echo "❌ El sistema no está en modo UEFI"
+  echo "❌ Sistema no iniciado en UEFI"
   exit 1
 }
 
@@ -29,69 +26,51 @@ BOOT_FS=$(findmnt -n -o FSTYPE /boot)
 }
 
 # =============================
-# Instalar systemd-boot
+# Instalar paquetes
 # =============================
 
-echo "💾 Instalando systemd-boot"
-bootctl install
+echo "📦 Instalando GRUB y herramientas necesarias"
+
+pacman -S --noconfirm \
+  grub \
+  efibootmgr \
+  os-prober \
+  ntfs-3g
 
 # =============================
-# loader.conf
+# Habilitar os-prober
 # =============================
 
-echo "⚙️ Configurando loader.conf"
+echo "🔍 Habilitando os-prober"
 
-mkdir -p /boot/loader
-
-cat > /boot/loader/loader.conf <<EOF
-default arch
-timeout 10
-editor 0
-EOF
+sed -i 's/^#GRUB_DISABLE_OS_PROBER=false/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
 
 # =============================
-# Entrada de Arch Linux
+# Instalar GRUB en la ESP
 # =============================
 
-echo "🐧 Creando entrada de Arch Linux"
+echo "💾 Instalando GRUB en modo UEFI"
 
-ROOT_UUID=$(findmnt / -no UUID)
-
-mkdir -p /boot/loader/entries
-
-cat > /boot/loader/entries/arch.conf <<EOF
-title   Arch Linux
-linux   /vmlinuz-linux-zen
-initrd  /initramfs-linux-zen.img
-options root=UUID=$ROOT_UUID rw
-EOF
+grub-install \
+  --target=x86_64-efi \
+  --efi-directory=/boot \
+  --bootloader-id=GRUB \
+  --recheck
 
 # =============================
-# Detección de Windows (opcional)
+# Generar configuración
 # =============================
 
-WINDOWS_EFI="/boot/EFI/Microsoft/Boot/bootmgfw.efi"
+echo "🧾 Generando grub.cfg"
+os-prober || true
+sleep 2
 
-if [[ -f "$WINDOWS_EFI" ]]; then
-  echo "🪟 Windows detectado, creando entrada"
-
-  cat > /boot/loader/entries/windows.conf <<EOF
-title   Windows Boot Manager
-efi     /EFI/Microsoft/Boot/bootmgfw.efi
-EOF
-else
-  echo "ℹ️ Configurando windows por defecto"
-
-    cat > /boot/loader/entries/windows.conf <<EOF
-title   Windows Boot Manager
-efi     /shellx64.efi
-EOF
-fi
+grub-mkconfig -o /boot/grub/grub.cfg
 
 # =============================
 # Final
 # =============================
 
 echo
-echo "✅ systemd-boot configurado correctamente"
-echo "👉 Menú visible durante 10 segundos"
+echo "✅ GRUB instalado correctamente"
+echo "👉 Windows será detectado automáticamente si existe"
