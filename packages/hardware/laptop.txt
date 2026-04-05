@@ -1,0 +1,4 @@
+# Laptop-only packages.
+# Installed only when a battery is detected (/sys/class/power_supply/BAT*).
+
+tlp                 # Advanced power management: extends battery life and reduces heat

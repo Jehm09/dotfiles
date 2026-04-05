@@ -1,0 +1,53 @@
+## Login manager greeter
+sysc-greet-hyprland       # Graphical console greeter for greetd (Go + Bubble Tea), Hyprland variant
+
+## Shell - Quickshell
+quickshell-git            # Quickshell - QML-based Wayland shell framework (latest git)
+
+## File manager extras
+nautilus-open-any-terminal # Nautilus extension: open chosen terminal from right-click
+unarchiver                # Archive extraction CLI (unar) - supports many formats
+
+## Terminal file manager
+yazi                      # Blazing-fast terminal file manager with preview support
+
+## Shell history
+atuin                     # Shell history with sync, search, and statistics
+
+## System info
+fastfetch                 # Fast system information display (neofetch alternative)
+
+## Version manager
+asdf-vm                   # Multi-language runtime version manager
+
+## Browsers
+brave-bin                 # Brave browser (privacy-focused Chromium-based)
+zen-browser-bin           # Zen Browser (Firefox-based, privacy-focused)
+google-chrome             # Google Chrome browser
+
+## Code editor
+visual-studio-code-bin    # Visual Studio Code (official Microsoft binary release)
+
+## Gaming
+protonup-qt               # GUI tool for managing Proton-GE and Wine-GE for Steam
+pear-desktop              # Pear Desktop application
+
+## Communication
+discord                   # Discord messaging and voice client
+equicord-installer-bin    # Equicord installer CLI (Equilotl) - Discord mod with OpenAsar
+
+## Hyprland ecosystem
+hyprpicker                # Wayland color picker tool
+hyprlock                  # Hyprland lockscreen (uses Wayland security protocols)
+hypridle                  # Hyprland idle daemon (triggers actions on inactivity)
+hyprshot                  # Hyprland screenshot utility wrapper
+
+## Audio
+pavucontrol-qt            # PipeWire/PulseAudio volume control GUI (Qt version)
+cava                      # Console-based audio visualizer (bar spectrum)
+
+## Theming
+matugen-bin               # Material You color scheme generation from wallpaper
+
+## Wayland clipboard history
+# cliphist is already in packages/desktop.txt via official repos

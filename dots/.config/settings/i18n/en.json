@@ -1,0 +1,41 @@
+{
+  "launcher": {
+    "placeholder": "Search apps, clipboard, emoji...",
+    "tabs": {
+      "apps": "Apps",
+      "clipboard": "Clipboard",
+      "emoji": "Emoji",
+      "calculator": "Calculator",
+      "websearch": "Web Search"
+    },
+    "empty": "No results found",
+    "websearchHint": "Press Enter to search the web"
+  },
+  "controlcenter": {
+    "title": "Control Center",
+    "wifi": "Wi-Fi",
+    "bluetooth": "Bluetooth",
+    "volume": "Volume",
+    "brightness": "Brightness",
+    "battery": "Battery",
+    "notifications": "Notifications",
+    "doNotDisturb": "Do Not Disturb",
+    "mute": "Mute"
+  },
+  "session": {
+    "title": "Session",
+    "logout": "Log Out",
+    "reboot": "Reboot",
+    "shutdown": "Shut Down",
+    "lock": "Lock",
+    "cancel": "Cancel"
+  },
+  "osd": {
+    "volume": "Volume",
+    "brightness": "Brightness",
+    "muted": "Muted"
+  },
+  "bar": {
+    "workspaceLabel": "Workspace"
+  }
+}

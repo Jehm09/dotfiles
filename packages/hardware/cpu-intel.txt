@@ -1,0 +1,4 @@
+# Intel CPU microcode - loaded by bootloader at early boot.
+# Provides stability fixes and security patches for Intel processors.
+
+intel-ucode         # Intel CPU microcode updates

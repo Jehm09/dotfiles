@@ -1,76 +1,60 @@
 #!/usr/bin/env bash
-# Configura GRUB como bootloader UEFI con soporte dual boot
+# Install and configure GRUB as the UEFI bootloader.
+# Supports dual boot: detects Windows and other Linux installs via os-prober.
 
 set -Eeuo pipefail
 
-echo "🚀 Configurando bootloader: GRUB (UEFI)"
-
-# =============================
-# Checks básicos
-# =============================
-
+# ------------------------------------------------------------------
+# Pre-flight checks
+# ------------------------------------------------------------------
 [[ -d /sys/firmware/efi ]] || {
-  echo "❌ Sistema no iniciado en UEFI"
-  exit 1
+    echo "ERROR: UEFI firmware directory not found. Is this a UEFI system?"
+    exit 1
 }
 
 [[ -d /boot ]] || {
-  echo "❌ /boot no existe"
-  exit 1
+    echo "ERROR: /boot directory not found."
+    exit 1
 }
 
 BOOT_FS=$(findmnt -n -o FSTYPE /boot)
 [[ "$BOOT_FS" == "vfat" ]] || {
-  echo "❌ /boot no es una partición EFI (vfat)"
-  exit 1
+    echo "ERROR: /boot is not a FAT32 EFI partition (found: $BOOT_FS)."
+    exit 1
 }
 
-# =============================
-# Instalar paquetes
-# =============================
+# ------------------------------------------------------------------
+# Install packages
+# ------------------------------------------------------------------
+echo "Installing GRUB and related tools..."
+pacman -S --needed --noconfirm \
+    grub       \
+    efibootmgr \
+    os-prober  \
+    ntfs-3g
 
-echo "📦 Instalando GRUB y herramientas necesarias"
-
-pacman -S --noconfirm \
-  grub \
-  efibootmgr \
-  os-prober \
-  ntfs-3g
-
-# =============================
-# Habilitar os-prober
-# =============================
-
-echo "🔍 Habilitando os-prober"
-
+# ------------------------------------------------------------------
+# Enable os-prober (detects Windows and other OSes)
+# ------------------------------------------------------------------
 sed -i 's/^#GRUB_DISABLE_OS_PROBER=false/GRUB_DISABLE_OS_PROBER=false/' /etc/default/grub
 
-# =============================
-# Instalar GRUB en la ESP
-# =============================
-
-echo "💾 Instalando GRUB en modo UEFI"
-
+# ------------------------------------------------------------------
+# Install GRUB to the EFI partition
+# ------------------------------------------------------------------
+echo "Installing GRUB to EFI partition..."
 grub-install \
-  --target=x86_64-efi \
-  --efi-directory=/boot \
-  --bootloader-id=GRUB \
-  --recheck
+    --target=x86_64-efi \
+    --efi-directory=/boot \
+    --bootloader-id=GRUB \
+    --recheck
 
-# =============================
-# Generar configuración
-# =============================
-
-echo "🧾 Generando grub.cfg"
-os-prober || true
+# ------------------------------------------------------------------
+# Generate GRUB configuration
+# ------------------------------------------------------------------
+echo "Generating GRUB config..."
+os-prober || true   # non-fatal: no other OS found is acceptable
 sleep 2
-
 grub-mkconfig -o /boot/grub/grub.cfg
 
-# =============================
-# Final
-# =============================
-
-echo
-echo "✅ GRUB instalado correctamente"
-echo "👉 Windows será detectado automáticamente si existe"
+echo ""
+echo "Bootloader installed. Windows will be detected automatically if present."

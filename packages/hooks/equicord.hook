@@ -1,0 +1,16 @@
+# Pacman alpm hook: reinstall Equicord + OpenAsar after Discord updates.
+#
+# Discord updates overwrite the Equicord and OpenAsar modifications on every
+# upgrade, so this hook automatically reapplies them in a post-transaction step.
+# Equilotl is provided by the equicord-installer-bin AUR package.
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = discord
+
+[Action]
+Description = Reinstalling Equicord and OpenAsar after Discord update...
+When = PostTransaction
+Exec = /bin/bash -c "Equilotl -install -location /opt/discord && Equilotl -install-openasar -location /opt/discord"

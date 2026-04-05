@@ -1,0 +1,4 @@
+# AMD CPU microcode - loaded by bootloader at early boot.
+# Provides stability fixes and security patches for AMD processors.
+
+amd-ucode           # AMD CPU microcode updates

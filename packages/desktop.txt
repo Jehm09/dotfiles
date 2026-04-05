@@ -1,0 +1,68 @@
+# Desktop environment packages installed inside arch-chroot (setup/6-desktop.sh).
+# Includes: Hyprland compositor, greetd login manager, Qt/Wayland stack for Quickshell,
+# screenshot tools, theming, and clipboard.
+#
+# NOTE: sysc-greet-hyprland (greetd greeter) comes from AUR - installed by
+# 6-desktop.sh (fresh install) or install-desktop.sh (existing Arch).
+
+## Compositor and seat management
+hyprland            # Hyprland Wayland compositor
+seatd               # Seat management daemon (device access without root for Hyprland)
+
+## Login manager
+greetd              # Minimal Wayland-native display manager / session starter
+
+## XDG desktop portals (screen sharing, file picker, etc.)
+xdg-desktop-portal-hyprland  # Hyprland-specific portal implementation
+xdg-desktop-portal-gtk       # GTK portal fallback (used by non-Hyprland apps)
+
+## Qt Wayland and Quickshell dependencies
+qt5-wayland         # Qt5 Wayland platform plugin
+qt6-wayland         # Qt6 Wayland platform plugin
+qt6-base            # Qt6 base libraries
+qt6-declarative     # Qt6 QML engine and QtQuick
+qt6-svg             # Qt6 SVG image support
+qt6-5compat         # Qt6 backward compatibility with Qt5 APIs
+qt6-multimedia      # Qt6 multimedia (video/audio playback in QML)
+qt6-imageformats    # Qt6 extra image format plugins (webp, tiff, etc.)
+qt6-tools           # Qt6 tools (qdbus, etc.)
+kirigami            # KDE Kirigami QML UI framework (used by Quickshell)
+
+## Wayland libraries required by Quickshell at runtime
+mesa                # OpenGL implementation (needed even with NVIDIA for some paths)
+libdrm              # Direct Rendering Manager userspace library
+wayland             # Wayland display protocol core library
+libpipewire         # PipeWire client library (screen capture in QML)
+jemalloc            # High-performance memory allocator (Quickshell runtime dep)
+cpptrace            # C++ stack trace library (Quickshell runtime dep)
+
+## Screenshot pipeline: grim -> slurp -> swappy
+grim                # Wayland screenshot capture tool
+slurp               # Interactive screen region selector (used with grim)
+swappy              # Screenshot annotation and crop tool
+
+## Clipboard
+wl-clipboard        # Wayland clipboard CLI (wl-copy, wl-paste)
+cliphist            # Clipboard history daemon (stores text and images)
+
+## System utilities
+inotify-tools       # inotifywait - filesystem event monitoring
+playerctl           # MPRIS media player controller (play/pause/next via keybind)
+brightnessctl       # Screen backlight brightness control
+trash-cli           # Freedesktop-compliant trash CLI (safe delete)
+
+## Authentication
+polkit              # Authorization framework (privilege request handling)
+polkit-gnome        # GNOME polkit authentication agent (GUI password dialogs)
+gnome-keyring       # GNOME keyring (stores passwords, SSH keys, secrets)
+
+## Fonts
+noto-fonts          # Google Noto font family (broad Unicode and language coverage)
+noto-fonts-emoji    # Noto Color Emoji font
+ttf-jetbrains-mono-nerd  # JetBrains Mono with Nerd Font icons (default UI font)
+fontconfig          # Font configuration and rendering library
+
+## Theming (GTK + Qt consistency)
+adw-gtk-theme       # Libadwaita-style GTK3 theme for GTK apps
+papirus-icon-theme  # Papirus icon theme
+breeze              # KDE Breeze theme for Qt applications

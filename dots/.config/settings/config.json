@@ -1,0 +1,31 @@
+{
+  "theme": {
+    "colorScheme": "dark",
+    "accent": "#cba6f7",
+    "font": "JetBrainsMono Nerd Font",
+    "fontSize": 13,
+    "borderRadius": 12,
+    "borderWidth": 2,
+    "opacity": 0.85
+  },
+  "bar": {
+    "height": 36,
+    "position": "top",
+    "showClock": true,
+    "clockFormat": "HH:mm",
+    "showBattery": true,
+    "showTray": true,
+    "showWorkspaces": true,
+    "workspaceCount": 10
+  },
+  "launcher": {
+    "width": 680,
+    "maxResults": 8
+  },
+  "wallpaper": {
+    "path": "~/Pictures/wallpaper.jpg"
+  },
+  "monitor": {
+    "primary": "DP-1"
+  }
+}
