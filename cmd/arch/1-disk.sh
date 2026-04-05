@@ -219,15 +219,15 @@ case "$MODE" in
         parted -s "$TARGET" unit MiB print free
         echo ""
 
-        # Find start of the largest free-space region
+        # Find largest free-space region; strip MiB suffix and round to integers
         read -r FREE_START FREE_END < <(
             parted -s "$TARGET" unit MiB print free \
             | awk '/Free Space/ {
+                gsub(/MiB/, "", $1); gsub(/MiB/, "", $2)
                 size = $2 - $1
                 if (size > best) { best = size; start = $1; end = $2 }
-              }
-              END { gsub(/MiB/, "", start); gsub(/MiB/, "", end); print start, end }' \
-            | sed 's/MiB//g'
+                }
+                END { printf "%d %d\n", int(start + 0.999), int(end) }'
         )
 
         [[ -n "$FREE_START" && -n "$FREE_END" ]] || {
@@ -235,7 +235,10 @@ case "$MODE" in
             exit 1
         }
 
-        EFI_END=$(echo "$FREE_START + 1024" | bc)
+        # Parted rejects values < 1 MiB — enforce minimum start of 1 MiB
+        [[ $FREE_START -lt 1 ]] && FREE_START=1
+
+        EFI_END=$((FREE_START + 1024))
 
         echo "Creating EFI partition (${FREE_START}MiB → ${EFI_END}MiB)..."
         parted -s "$TARGET" mkpart ESP fat32 "${FREE_START}MiB" "${EFI_END}MiB"
