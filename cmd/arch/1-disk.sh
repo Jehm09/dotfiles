@@ -13,9 +13,6 @@ ROOT_FS="ext4"
 # Partition variables (set by whichever mode runs)
 EFI_PART=""
 ROOT_PART=""
-SWAP_PART=""
-HOME_PART=""
-FORMAT_HOME=false
 
 # ------------------------------------------------------------------
 # Pre-flight checks
@@ -147,76 +144,49 @@ case "$MODE" in
         fi
 
         echo ""
-        echo "Assign a role to each partition. Partitions listed:"
+        echo "Partitions available:"
         lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT | grep -v "^loop"
         echo ""
 
         # ── Root (required) ───────────────────────────────────────────
-        echo "── ROOT  (required, will be formatted as $ROOT_FS) ──"
-        ROOT_PART=$(pick_partition "Root partition")
-        [[ -b "$ROOT_PART" ]] || { echo "ERROR: invalid root partition."; exit 1; }
+        echo "── ROOT ──"
+        ROOT_PART=$(pick_partition "Select root partition")
+        [[ -b "$ROOT_PART" ]] || { echo "ERROR: invalid partition."; exit 1; }
+        read -rp "Format $ROOT_PART as $ROOT_FS? [Y/n]: " fmt_root
+        FORMAT_ROOT=true
+        [[ "$fmt_root" =~ ^[Nn]$ ]] && FORMAT_ROOT=false
 
         # ── EFI (required) ────────────────────────────────────────────
         echo ""
-        echo "── EFI / ESP  (required, will NOT be reformatted) ──"
-        echo "   Tip: on a Windows disk this is usually the first small FAT32 partition."
-        EFI_PART=$(pick_partition "EFI partition")
-        [[ -b "$EFI_PART" ]] || { echo "ERROR: invalid EFI partition."; exit 1; }
-
-        # ── Swap (optional) ───────────────────────────────────────────
-        echo ""
-        echo "── SWAP  (optional — skip if you prefer a swapfile later) ──"
-        SWAP_PART=$(pick_partition "Swap partition" yes)
-
-        # ── Home (optional) ───────────────────────────────────────────
-        echo ""
-        echo "── HOME  (optional — skip to use a single root partition) ──"
-        HOME_PART=$(pick_partition "Home partition" yes)
-
-        if [[ -n "$HOME_PART" ]]; then
-            echo ""
-            read -rp "Format $HOME_PART as ext4? Choosing 'no' keeps existing data. [y/N]: " fmt_home
-            [[ "$fmt_home" =~ ^[Yy]$ ]] && FORMAT_HOME=true
-        fi
-
-        # ── Sanity: no duplicate assignments ─────────────────────────
-        declare -A _seen
-        for _p in "$ROOT_PART" "$EFI_PART" "${SWAP_PART:-}" "${HOME_PART:-}"; do
-            [[ -z "$_p" ]] && continue
-            if [[ -n "${_seen[$_p]+set}" ]]; then
-                echo "ERROR: $p assigned to more than one role."
-                exit 1
-            fi
-            _seen[$_p]=1
-        done
+        echo "── EFI / boot ──"
+        EFI_PART=$(pick_partition "Select EFI partition")
+        [[ -b "$EFI_PART" ]] || { echo "ERROR: invalid partition."; exit 1; }
+        read -rp "Format $EFI_PART as FAT32? (say 'n' to reuse existing EFI) [y/N]: " fmt_efi
+        FORMAT_EFI=false
+        [[ "$fmt_efi" =~ ^[Yy]$ ]] && FORMAT_EFI=true
 
         # ── Confirm plan ──────────────────────────────────────────────
         echo ""
         echo "── Plan ─────────────────────────────────────────────────────"
-        echo "  Root  → $ROOT_PART   (format as $ROOT_FS)"
-        echo "  EFI   → $EFI_PART   (mount only, no format)"
-        [[ -n "$SWAP_PART" ]] && echo "  Swap  → $SWAP_PART   (mkswap + swapon)"
-        if [[ -n "$HOME_PART" ]]; then
-            $FORMAT_HOME \
-                && echo "  Home  → $HOME_PART   (format as ext4)" \
-                || echo "  Home  → $HOME_PART   (mount, keep existing data)"
-        fi
+        $FORMAT_ROOT \
+            && echo "  /      → $ROOT_PART   format as $ROOT_FS" \
+            || echo "  /      → $ROOT_PART   mount only (no format)"
+        $FORMAT_EFI \
+            && echo "  /boot  → $EFI_PART   format as FAT32" \
+            || echo "  /boot  → $EFI_PART   mount only (no format)"
         echo "─────────────────────────────────────────────────────────────"
         read -rp "Proceed? Type 'yes' to confirm: " CONFIRM
         [[ "$CONFIRM" == "yes" ]] || { echo "Aborted."; exit 1; }
 
         # ── Format ───────────────────────────────────────────────────
-        echo "Formatting root partition as $ROOT_FS..."
-        mkfs."$ROOT_FS" -F "$ROOT_PART"
-
-        if [[ -n "$HOME_PART" ]] && $FORMAT_HOME; then
-            echo "Formatting home partition as ext4..."
-            mkfs.ext4 -F "$HOME_PART"
+        if $FORMAT_ROOT; then
+            echo "Formatting root partition as $ROOT_FS..."
+            mkfs."$ROOT_FS" -F "$ROOT_PART"
         fi
 
-        if [[ -n "$SWAP_PART" ]]; then
-            echo "Setting up swap..."
-            mkswap "$SWAP_PART"
+        if $FORMAT_EFI; then
+            echo "Formatting EFI partition as FAT32..."
+            mkfs.fat -F32 "$EFI_PART"
         fi
         ;;
 
@@ -233,19 +203,9 @@ echo ""
 echo "Mounting filesystems..."
 
 mount "$ROOT_PART" /mnt
-
 mkdir -p /mnt/boot
 mount "$EFI_PART" /mnt/boot
 
-if [[ -n "$HOME_PART" ]]; then
-    mkdir -p /mnt/home
-    mount "$HOME_PART" /mnt/home
-fi
-
-if [[ -n "$SWAP_PART" ]]; then
-    swapon "$SWAP_PART"
-fi
-
 echo ""
 echo "Pre-install complete. Layout:"
-lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT "$ROOT_PART" "$EFI_PART" ${SWAP_PART:+"$SWAP_PART"} ${HOME_PART:+"$HOME_PART"} 2>/dev/null || true
+lsblk -o NAME,SIZE,FSTYPE,MOUNTPOINT "$ROOT_PART" "$EFI_PART" 2>/dev/null || true
