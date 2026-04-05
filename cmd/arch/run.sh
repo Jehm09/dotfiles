@@ -82,10 +82,9 @@ bash /root/dotfiles_src/cmd/arch/4-bootloader.sh
 bash /root/dotfiles_src/cmd/arch/5-hardware.sh
 bash /root/dotfiles_src/cmd/arch/6-desktop.sh
 # Clean up temporary files
+cd /root
 rm -f /root/install.conf
 rm -rf /root/dotfiles_src
-CHROOT
-
 echo ""
 echo "==> Installation complete. Log saved to $LOG_FILE"
 echo ""
@@ -93,3 +92,4 @@ echo "Next steps:"
 echo "  1.  umount -R /mnt"
 echo "  2.  reboot"
 echo "  3.  Log in — your dotfiles are already linked at ~/.config"
+CHROOT
