@@ -136,7 +136,7 @@ case "$MODE" in
 
     # ── MODE 2: delete selected partitions → create EFI + root in freed space ──
     2)
-        mapfile -t PARTS < <(lsblk -n -o NAME,TYPE | awk '$2=="part"{print $1}')
+        mapfile -t PARTS < <(lsblk -ln -o NAME,TYPE | awk '$2=="part"{print $1}')
 
         if [[ ${#PARTS[@]} -eq 0 ]]; then
             echo "ERROR: No partitions found."
@@ -248,7 +248,7 @@ case "$MODE" in
 
         # Identify the two new partitions (highest start sectors = just created)
         mapfile -t NEW_PARTS < <(
-            lsblk -n -o NAME,TYPE "$TARGET" | awk '$2=="part"{print $1}' \
+            lsblk -ln -o NAME,TYPE "$TARGET" | awk '$2=="part"{print $1}' \
             | while read -r p; do
                 start=$(cat "/sys/class/block/$p/start" 2>/dev/null || echo 0)
                 echo "$start $p"
