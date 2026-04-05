@@ -8,11 +8,13 @@ set -Eeuo pipefail
 
 KEYMAP="${KEYMAP:-us}"
 EFI_SIZE="1024MiB"
+EFI_SIZE_MIB="${EFI_SIZE%MiB}"   # numeric only, for arithmetic
 ROOT_FS="ext4"
 
-# Partition variables (set by whichever mode runs)
+# Partition variables — set by whichever mode runs
 EFI_PART=""
 ROOT_PART=""
+TARGET=""
 
 # ------------------------------------------------------------------
 # Pre-flight checks
@@ -52,27 +54,41 @@ lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINT
 echo ""
 
 # ------------------------------------------------------------------
-# Helper: pick one partition from the global PARTS array
-#   pick_partition <prompt> [optional]
-#   Prints the /dev/... path, or empty string if skipped (optional only)
+# Helpers
 # ------------------------------------------------------------------
-pick_partition() {
-    local prompt="$1"
-    local optional="${2:-no}"
-    local choices=("${PARTS[@]}")
-    [[ "$optional" == "yes" ]] && choices+=("(skip)")
 
+# Pick a disk interactively; sets global TARGET
+pick_disk() {
+    local prompt="${1:-Select disk}"
+    local disks
+    mapfile -t disks < <(lsblk -ldn -o NAME)
     PS3="$prompt: "
     local chosen
-    select chosen in "${choices[@]}"; do
+    select chosen in "${disks[@]}"; do
         [[ -n "$chosen" ]] && break
     done
+    TARGET="/dev/$chosen"
+}
 
-    if [[ "$chosen" == "(skip)" ]]; then
-        echo ""
-    else
-        echo "/dev/$chosen"
-    fi
+# partprobe + short settle wait
+partprobe_wait() {
+    partprobe "$TARGET"
+    sleep 2
+}
+
+# Format EFI as FAT32 (+ set ESP flag) and root as ROOT_FS
+# Requires: EFI_PART, ROOT_PART, TARGET set
+format_partitions() {
+    echo "Formatting EFI partition ($EFI_PART) as FAT32..."
+    mkfs.fat -F32 "$EFI_PART"
+
+    local efi_num
+    efi_num=$(cat "/sys/class/block/${EFI_PART##/dev/}/partition" 2>/dev/null) \
+        || efi_num=$(echo "${EFI_PART##/dev/}" | grep -o '[0-9]*$')
+    parted -s "$TARGET" set "$efi_num" esp on
+
+    echo "Formatting root partition ($ROOT_PART) as $ROOT_FS..."
+    mkfs."$ROOT_FS" -F "$ROOT_PART"
 }
 
 # ------------------------------------------------------------------
@@ -80,22 +96,14 @@ pick_partition() {
 # ------------------------------------------------------------------
 echo "Install mode:"
 echo "  1) Whole disk        — erase everything and partition from scratch"
-echo "  2) Existing partitions — assign roles to existing partitions (dual-boot / reuse Linux layout)"
+echo "  2) Existing partitions — delete chosen partitions and use freed space (dual-boot)"
 echo ""
 read -rp "Select mode [1/2]: " MODE
 
 case "$MODE" in
-    # ── MODE 1: whole disk ─────────────────────────────────────────────
+    # ── MODE 1: whole disk ────────────────────────────────────────────
     1)
-        mapfile -t DISKS < <(lsblk -d -n -o NAME)
-
-        echo ""
-        PS3="Select the disk to install Arch Linux on: "
-        select DISK in "${DISKS[@]}"; do
-            [[ -n "$DISK" ]] && break
-        done
-
-        TARGET="/dev/$DISK"
+        pick_disk "Select the disk to install Arch Linux on"
 
         echo ""
         echo "WARNING: All data on $TARGET will be PERMANENTLY DESTROYED."
@@ -115,10 +123,9 @@ case "$MODE" in
         echo "Creating root partition (remaining space)..."
         parted -s "$TARGET" mkpart primary "$ROOT_FS" "$EFI_SIZE" 100%
 
-        partprobe "$TARGET"
-        sleep 2
+        partprobe_wait
 
-        # NVMe/MMC: /dev/nvme0n1p1, regular: /dev/sda1
+        # NVMe/MMC use 'p' prefix: /dev/nvme0n1p1 vs /dev/sda1
         if [[ "$TARGET" =~ [0-9]$ ]]; then
             EFI_PART="${TARGET}p1"
             ROOT_PART="${TARGET}p2"
@@ -127,35 +134,28 @@ case "$MODE" in
             ROOT_PART="${TARGET}2"
         fi
 
-        echo "Formatting EFI partition as FAT32..."
-        mkfs.fat -F32 "$EFI_PART"
-
-        echo "Formatting root partition as $ROOT_FS..."
-        mkfs."$ROOT_FS" -F "$ROOT_PART"
+        format_partitions
         ;;
 
-    # ── MODE 2: delete selected partitions → create EFI + root in freed space ──
+    # ── MODE 2: delete selected partitions → use freed space ─────────
     2)
         mapfile -t PARTS < <(lsblk -ln -o NAME,TYPE | awk '$2=="part"{print $1}')
 
-        # Show numbered list with size/fstype/disk info
         echo ""
         echo "Available partitions (Enter nothing to skip deletion and use existing free space):"
         echo ""
         for i in "${!PARTS[@]}"; do
-            disk=$(lsblk -ln -o PKNAME "/dev/${PARTS[$i]}" 2>/dev/null)
+            local_disk=$(lsblk -ln -o PKNAME "/dev/${PARTS[$i]}" 2>/dev/null)
             info=$(lsblk -ln -o SIZE,FSTYPE,LABEL "/dev/${PARTS[$i]}" 2>/dev/null | head -1)
-            printf "  %2d) %-12s disk: %-8s %s\n" "$((i+1))" "${PARTS[$i]}" "$disk" "$info"
+            printf "  %2d) %-12s disk: %-8s %s\n" "$((i+1))" "${PARTS[$i]}" "$local_disk" "$info"
         done
         echo ""
 
-        # Multi-select: Enter with no input = skip deletion
         read -rp "Numbers of partitions to DELETE (space-separated, Enter to skip): " -ra SELECTIONS
 
         declare -a TO_DELETE=()
 
         if [[ ${#SELECTIONS[@]} -gt 0 ]]; then
-            # Resolve selections → device names
             for sel in "${SELECTIONS[@]}"; do
                 idx=$((sel - 1))
                 if [[ $idx -lt 0 || $idx -ge ${#PARTS[@]} ]]; then
@@ -165,7 +165,7 @@ case "$MODE" in
                 TO_DELETE+=("${PARTS[$idx]}")
             done
 
-            # Validate all partitions are on the same disk
+            # Validate all selected partitions are on the same disk
             declare -a PARENT_DISKS=()
             for part in "${TO_DELETE[@]}"; do
                 disk=$(lsblk -ln -o PKNAME "/dev/$part" 2>/dev/null)
@@ -182,17 +182,11 @@ case "$MODE" in
 
             TARGET="/dev/${UNIQUE_DISKS[0]}"
         else
-            # No partitions to delete — ask which disk has the free space
-            echo "No partitions selected. Which disk has the free space to use?"
-            mapfile -t DISKS < <(lsblk -ldn -o NAME)
-            PS3="Disk: "
-            select DISK in "${DISKS[@]}"; do
-                [[ -n "$DISK" ]] && break
-            done
-            TARGET="/dev/$DISK"
+            echo "No partitions selected — using existing free space."
+            pick_disk "Select disk that has the free space"
         fi
 
-        # Show plan
+        # Show plan and confirm
         echo ""
         echo "── Plan ─────────────────────────────────────────────────────"
         echo "  Disk: $TARGET"
@@ -221,11 +215,9 @@ case "$MODE" in
         done
 
         if [[ ${#TO_DELETE[@]} -gt 0 ]]; then
-            partprobe "$TARGET"
-            sleep 1
+            partprobe_wait
         fi
 
-        # Show disk state
         echo ""
         echo "Disk layout on $TARGET:"
         parted -s "$TARGET" unit MiB print free
@@ -238,21 +230,21 @@ case "$MODE" in
                 gsub(/MiB/, "", $1); gsub(/MiB/, "", $2)
                 size = $2 - $1
                 if (size > best) { best = size; start = $1; end = $2 }
-                }
-                END { printf "%d %d\n", int(start + 0.999), int(end) }'
+              }
+              END { printf "%d %d\n", int(start + 0.999), int(end) }'
         )
 
         [[ -n "$FREE_START" && -n "$FREE_END" ]] || {
-            echo "ERROR: could not find free space on $TARGET after deletion."
+            echo "ERROR: could not find free space on $TARGET."
             exit 1
         }
 
-        # Parted rejects values < 1 MiB — enforce minimum start of 1 MiB
+        # Parted rejects values < 1 MiB
         [[ $FREE_START -lt 1 ]] && FREE_START=1
 
-        EFI_END=$((FREE_START + 1024))
+        EFI_END=$((FREE_START + EFI_SIZE_MIB))
 
-        # Snapshot existing partitions BEFORE creating new ones
+        # Snapshot partitions BEFORE creating — diff after to find the new ones
         mapfile -t PARTS_BEFORE < <(lsblk -ln -o NAME,TYPE "$TARGET" | awk '$2=="part"{print $1}')
 
         echo "Creating EFI partition (${FREE_START}MiB → ${EFI_END}MiB)..."
@@ -261,15 +253,12 @@ case "$MODE" in
         echo "Creating root partition (${EFI_END}MiB → ${FREE_END}MiB)..."
         parted -s "$TARGET" mkpart primary "$ROOT_FS" "${EFI_END}MiB" "${FREE_END}MiB"
 
-        partprobe "$TARGET"
-        sleep 2
+        partprobe_wait
 
-        # Identify ONLY the new partitions by diffing before/after lists,
-        # then sort by start sector so EFI (lower) comes first.
+        # New partitions = after minus before, sorted by start sector (EFI first)
         mapfile -t NEW_PARTS < <(
             lsblk -ln -o NAME,TYPE "$TARGET" | awk '$2=="part"{print $1}' \
             | while read -r p; do
-                # skip partitions that existed before
                 for old in "${PARTS_BEFORE[@]}"; do
                     [[ "$p" == "$old" ]] && continue 2
                 done
@@ -281,7 +270,6 @@ case "$MODE" in
 
         [[ ${#NEW_PARTS[@]} -eq 2 ]] || {
             echo "ERROR: expected 2 new partitions, found ${#NEW_PARTS[@]}."
-            echo "Current layout:"
             lsblk "$TARGET"
             exit 1
         }
@@ -289,17 +277,8 @@ case "$MODE" in
         EFI_PART="/dev/${NEW_PARTS[0]}"
         ROOT_PART="/dev/${NEW_PARTS[1]}"
 
-        echo "New partitions identified: EFI=$EFI_PART  root=$ROOT_PART"
-
-        echo "Formatting EFI partition ($EFI_PART) as FAT32..."
-        mkfs.fat -F32 "$EFI_PART"
-
-        efi_num=$(cat "/sys/class/block/${NEW_PARTS[0]}/partition" 2>/dev/null) \
-            || efi_num=$(echo "${NEW_PARTS[0]}" | grep -o '[0-9]*$')
-        parted -s "$TARGET" set "$efi_num" esp on
-
-        echo "Formatting root partition ($ROOT_PART) as $ROOT_FS..."
-        mkfs."$ROOT_FS" -F "$ROOT_PART"
+        echo "New partitions: EFI=$EFI_PART  root=$ROOT_PART"
+        format_partitions
         ;;
 
     *)
@@ -325,11 +304,10 @@ read -rp "Looks good? Type 'yes' to mount and continue, anything else to abort: 
 [[ "$REVIEW" == "yes" ]] || { echo "Aborted. Nothing has been mounted."; exit 1; }
 
 # ------------------------------------------------------------------
-# Mounting (common to both modes)
+# Mounting
 # ------------------------------------------------------------------
 echo ""
 echo "Mounting filesystems..."
-
 mount "$ROOT_PART" /mnt
 mkdir -p /mnt/boot
 mount "$EFI_PART" /mnt/boot
