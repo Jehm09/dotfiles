@@ -134,7 +134,7 @@ case "$MODE" in
         mkfs."$ROOT_FS" -F "$ROOT_PART"
         ;;
 
-    # ── MODE 2: assign existing partitions ────────────────────────────
+    # ── MODE 2: delete selected partitions → create EFI + root in freed space ──
     2)
         mapfile -t PARTS < <(lsblk -n -o NAME,TYPE | awk '$2=="part"{print $1}')
 
@@ -143,51 +143,138 @@ case "$MODE" in
             exit 1
         fi
 
+        # Show numbered list with size/fstype info
         echo ""
-        echo "Partitions available:"
-        lsblk -o NAME,SIZE,FSTYPE,LABEL,MOUNTPOINT | grep -v "^loop"
+        echo "Available partitions:"
+        echo ""
+        for i in "${!PARTS[@]}"; do
+            info=$(lsblk -n -o SIZE,FSTYPE,LABEL "/dev/${PARTS[$i]}" 2>/dev/null | head -1)
+            printf "  %2d) %s  %s\n" "$((i+1))" "${PARTS[$i]}" "$info"
+        done
         echo ""
 
-        # ── Root (required) ───────────────────────────────────────────
-        echo "── ROOT ──"
-        ROOT_PART=$(pick_partition "Select root partition")
-        [[ -b "$ROOT_PART" ]] || { echo "ERROR: invalid partition."; exit 1; }
-        read -rp "Format $ROOT_PART as $ROOT_FS? [Y/n]: " fmt_root
-        FORMAT_ROOT=true
-        [[ "$fmt_root" =~ ^[Nn]$ ]] && FORMAT_ROOT=false
+        # Multi-select: user types numbers separated by spaces
+        read -rp "Numbers of partitions to DELETE (space-separated, e.g. 3 4): " -a SELECTIONS
 
-        # ── EFI (required) ────────────────────────────────────────────
-        echo ""
-        echo "── EFI / boot ──"
-        EFI_PART=$(pick_partition "Select EFI partition")
-        [[ -b "$EFI_PART" ]] || { echo "ERROR: invalid partition."; exit 1; }
-        read -rp "Format $EFI_PART as FAT32? (say 'n' to reuse existing EFI) [y/N]: " fmt_efi
-        FORMAT_EFI=false
-        [[ "$fmt_efi" =~ ^[Yy]$ ]] && FORMAT_EFI=true
+        [[ ${#SELECTIONS[@]} -gt 0 ]] || { echo "No partitions selected. Aborted."; exit 1; }
 
-        # ── Confirm plan ──────────────────────────────────────────────
+        # Resolve selections → device names
+        declare -a TO_DELETE=()
+        for sel in "${SELECTIONS[@]}"; do
+            idx=$((sel - 1))
+            if [[ $idx -lt 0 || $idx -ge ${#PARTS[@]} ]]; then
+                echo "ERROR: '$sel' is not a valid number."
+                exit 1
+            fi
+            TO_DELETE+=("${PARTS[$idx]}")
+        done
+
+        # Validate all partitions are on the same disk
+        declare -a PARENT_DISKS=()
+        for part in "${TO_DELETE[@]}"; do
+            disk=$(lsblk -n -o PKNAME "/dev/$part" 2>/dev/null)
+            [[ -n "$disk" ]] || { echo "ERROR: could not determine parent disk of $part."; exit 1; }
+            PARENT_DISKS+=("$disk")
+        done
+
+        mapfile -t UNIQUE_DISKS < <(printf '%s\n' "${PARENT_DISKS[@]}" | sort -u)
+        if [[ ${#UNIQUE_DISKS[@]} -ne 1 ]]; then
+            echo "ERROR: selected partitions span multiple disks (${UNIQUE_DISKS[*]})."
+            echo "       All partitions to delete must be on the same disk."
+            exit 1
+        fi
+
+        TARGET="/dev/${UNIQUE_DISKS[0]}"
+
+        # Show deletion plan
         echo ""
         echo "── Plan ─────────────────────────────────────────────────────"
-        $FORMAT_ROOT \
-            && echo "  /      → $ROOT_PART   format as $ROOT_FS" \
-            || echo "  /      → $ROOT_PART   mount only (no format)"
-        $FORMAT_EFI \
-            && echo "  /boot  → $EFI_PART   format as FAT32" \
-            || echo "  /boot  → $EFI_PART   mount only (no format)"
+        echo "  Disk: $TARGET"
+        echo "  Partitions to DELETE:"
+        for part in "${TO_DELETE[@]}"; do
+            info=$(lsblk -n -o SIZE,FSTYPE,LABEL "/dev/$part" 2>/dev/null | head -1)
+            echo "    /dev/$part  $info"
+        done
+        echo "  Then create:"
+        echo "    EFI   ${EFI_SIZE} FAT32"
+        echo "    root  remaining  $ROOT_FS"
         echo "─────────────────────────────────────────────────────────────"
-        read -rp "Proceed? Type 'yes' to confirm: " CONFIRM
+        read -rp "Type 'yes' to confirm: " CONFIRM
         [[ "$CONFIRM" == "yes" ]] || { echo "Aborted."; exit 1; }
 
-        # ── Format ───────────────────────────────────────────────────
-        if $FORMAT_ROOT; then
-            echo "Formatting root partition as $ROOT_FS..."
-            mkfs."$ROOT_FS" -F "$ROOT_PART"
-        fi
+        # Delete selected partitions
+        for part in "${TO_DELETE[@]}"; do
+            part_num=$(cat "/sys/class/block/$part/partition" 2>/dev/null) \
+                || part_num=$(echo "$part" | grep -o '[0-9]*$')
+            echo "Deleting /dev/$part (partition $part_num on $TARGET)..."
+            parted -s "$TARGET" rm "$part_num"
+        done
 
-        if $FORMAT_EFI; then
-            echo "Formatting EFI partition as FAT32..."
-            mkfs.fat -F32 "$EFI_PART"
-        fi
+        partprobe "$TARGET"
+        sleep 1
+
+        # Show disk state after deletion
+        echo ""
+        echo "Disk layout after deletion:"
+        parted -s "$TARGET" unit MiB print free
+        echo ""
+
+        # Find start of the largest free-space region
+        read -r FREE_START FREE_END < <(
+            parted -s "$TARGET" unit MiB print free \
+            | awk '/Free Space/ {
+                size = $2 - $1
+                if (size > best) { best = size; start = $1; end = $2 }
+              }
+              END { gsub(/MiB/, "", start); gsub(/MiB/, "", end); print start, end }' \
+            | sed 's/MiB//g'
+        )
+
+        [[ -n "$FREE_START" && -n "$FREE_END" ]] || {
+            echo "ERROR: could not find free space on $TARGET after deletion."
+            exit 1
+        }
+
+        EFI_END=$(echo "$FREE_START + 1024" | bc)
+
+        echo "Creating EFI partition (${FREE_START}MiB → ${EFI_END}MiB)..."
+        parted -s "$TARGET" mkpart ESP fat32 "${FREE_START}MiB" "${EFI_END}MiB"
+
+        echo "Creating root partition (${EFI_END}MiB → ${FREE_END}MiB)..."
+        parted -s "$TARGET" mkpart primary "$ROOT_FS" "${EFI_END}MiB" "${FREE_END}MiB"
+
+        partprobe "$TARGET"
+        sleep 2
+
+        # Identify the two new partitions (highest start sectors = just created)
+        mapfile -t NEW_PARTS < <(
+            lsblk -n -o NAME,TYPE "$TARGET" | awk '$2=="part"{print $1}' \
+            | while read -r p; do
+                start=$(cat "/sys/class/block/$p/start" 2>/dev/null || echo 0)
+                echo "$start $p"
+              done \
+            | sort -n | tail -2 | awk '{print $2}'
+        )
+
+        [[ ${#NEW_PARTS[@]} -eq 2 ]] || {
+            echo "ERROR: could not identify the new partitions."
+            lsblk "$TARGET"
+            exit 1
+        }
+
+        EFI_PART="/dev/${NEW_PARTS[0]}"
+        ROOT_PART="/dev/${NEW_PARTS[1]}"
+
+        echo "Formatting EFI partition ($EFI_PART) as FAT32..."
+        mkfs.fat -F32 "$EFI_PART"
+
+        # Set ESP flag — need partition number
+        efi_num=$(cat "/sys/class/block/${NEW_PARTS[0]}/partition" 2>/dev/null) \
+            || efi_num=$(echo "${NEW_PARTS[0]}" | grep -o '[0-9]*$')
+        parted -s "$TARGET" set "$efi_num" esp on
+
+        echo "Formatting root partition ($ROOT_PART) as $ROOT_FS..."
+        mkfs."$ROOT_FS" -F "$ROOT_PART"
         ;;
 
     *)
