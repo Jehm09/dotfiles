@@ -13,11 +13,11 @@
 # CPU detection
 # ------------------------------------------------------------------
 detect_cpu() {
-    CPU_VENDOR=$(awk -F: '/Vendor ID/ {gsub(/ /,"",$2); print $2}' /proc/cpuinfo | head -n1)
+    CPU_VENDOR=$(awk -F: '/vendor_id/ {gsub(/ /,"",$2); print $2; exit}' /proc/cpuinfo)
     case "$CPU_VENDOR" in
         GenuineIntel) CPU_BRAND="Intel" ;;
-        AuthenticAMD)  CPU_BRAND="AMD"   ;;
-        *)             CPU_BRAND="Unknown"; CPU_VENDOR="Unknown" ;;
+        AuthenticAMD) CPU_BRAND="AMD"   ;;
+        *)            CPU_BRAND="Unknown"; CPU_VENDOR="Unknown" ;;
     esac
 }
 
@@ -32,9 +32,9 @@ detect_gpu() {
     HAS_AMD_GPU=false
     HAS_NVIDIA_GPU=false
 
-    echo "$gpu_info" | grep -qi "intel"          && HAS_INTEL_GPU=true
-    echo "$gpu_info" | grep -qi "amd\|radeon"    && HAS_AMD_GPU=true
-    echo "$gpu_info" | grep -qi "nvidia"         && HAS_NVIDIA_GPU=true
+    echo "$gpu_info" | grep -qi "intel"        && HAS_INTEL_GPU=true  || true
+    echo "$gpu_info" | grep -qi "amd\|radeon"  && HAS_AMD_GPU=true    || true
+    echo "$gpu_info" | grep -qi "nvidia"       && HAS_NVIDIA_GPU=true || true
 }
 
 # ------------------------------------------------------------------
