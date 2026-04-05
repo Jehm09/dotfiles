@@ -252,6 +252,9 @@ case "$MODE" in
 
         EFI_END=$((FREE_START + 1024))
 
+        # Snapshot existing partitions BEFORE creating new ones
+        mapfile -t PARTS_BEFORE < <(lsblk -ln -o NAME,TYPE "$TARGET" | awk '$2=="part"{print $1}')
+
         echo "Creating EFI partition (${FREE_START}MiB → ${EFI_END}MiB)..."
         parted -s "$TARGET" mkpart ESP fat32 "${FREE_START}MiB" "${EFI_END}MiB"
 
@@ -261,18 +264,24 @@ case "$MODE" in
         partprobe "$TARGET"
         sleep 2
 
-        # Identify the two new partitions (highest start sectors = just created)
+        # Identify ONLY the new partitions by diffing before/after lists,
+        # then sort by start sector so EFI (lower) comes first.
         mapfile -t NEW_PARTS < <(
             lsblk -ln -o NAME,TYPE "$TARGET" | awk '$2=="part"{print $1}' \
             | while read -r p; do
+                # skip partitions that existed before
+                for old in "${PARTS_BEFORE[@]}"; do
+                    [[ "$p" == "$old" ]] && continue 2
+                done
                 start=$(cat "/sys/class/block/$p/start" 2>/dev/null || echo 0)
                 echo "$start $p"
-                done \
-            | sort -n | tail -2 | awk '{print $2}'
+              done \
+            | sort -n | awk '{print $2}'
         )
 
         [[ ${#NEW_PARTS[@]} -eq 2 ]] || {
-            echo "ERROR: could not identify the new partitions."
+            echo "ERROR: expected 2 new partitions, found ${#NEW_PARTS[@]}."
+            echo "Current layout:"
             lsblk "$TARGET"
             exit 1
         }
@@ -280,10 +289,11 @@ case "$MODE" in
         EFI_PART="/dev/${NEW_PARTS[0]}"
         ROOT_PART="/dev/${NEW_PARTS[1]}"
 
+        echo "New partitions identified: EFI=$EFI_PART  root=$ROOT_PART"
+
         echo "Formatting EFI partition ($EFI_PART) as FAT32..."
         mkfs.fat -F32 "$EFI_PART"
 
-        # Set ESP flag — need partition number
         efi_num=$(cat "/sys/class/block/${NEW_PARTS[0]}/partition" 2>/dev/null) \
             || efi_num=$(echo "${NEW_PARTS[0]}" | grep -o '[0-9]*$')
         parted -s "$TARGET" set "$efi_num" esp on
@@ -297,6 +307,22 @@ case "$MODE" in
         exit 1
         ;;
 esac
+
+# ------------------------------------------------------------------
+# Review partition table before mounting
+# ------------------------------------------------------------------
+echo ""
+echo "════════════════════════════════════════════════════════════"
+echo "  Partition table — review before mounting"
+echo "════════════════════════════════════════════════════════════"
+lsblk -o NAME,SIZE,TYPE,FSTYPE,LABEL,MOUNTPOINT
+echo ""
+echo "  EFI  will mount at → /mnt/boot   ($EFI_PART)"
+echo "  Root will mount at → /mnt         ($ROOT_PART)"
+echo "════════════════════════════════════════════════════════════"
+echo ""
+read -rp "Looks good? Type 'yes' to mount and continue, anything else to abort: " REVIEW
+[[ "$REVIEW" == "yes" ]] || { echo "Aborted. Nothing has been mounted."; exit 1; }
 
 # ------------------------------------------------------------------
 # Mounting (common to both modes)
