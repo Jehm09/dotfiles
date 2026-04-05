@@ -1,0 +1,6 @@
+module qs.services
+singleton Config       1.0 Config.qml
+singleton Colors       1.0 Colors.qml
+singleton Wallpaper    1.0 Wallpaper.qml
+singleton I18n         1.0 I18n.qml
+singleton Visibilities 1.0 Visibilities.qml

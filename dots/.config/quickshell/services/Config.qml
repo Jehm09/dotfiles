@@ -1,71 +1,139 @@
-// Config - singleton that reads ~/.config/settings/config.json at runtime.
-// All QML components consume values through this singleton.
-// The file is watched for changes: editing config.json hot-reloads the shell.
-
 pragma Singleton
+pragma ComponentBehavior: Bound
 
 import QtQuick
+import QtCore
 import Quickshell
 import Quickshell.Io
 
-QtObject {
+// Config — persistent user settings backed by ~/.config/settings/config.json
+//
+// Usage:
+//   import qs.services
+//   Config.appearance.dark          // read
+//   Config.appearance.dark = false  // write (auto-saved with debounce)
+//
+Singleton {
     id: root
 
-    // Resolved path to the config file
-    readonly property string configPath: Quickshell.env("HOME") + "/.config/settings/config.json"
-
-    // Parsed config object - access as Config.theme.accent, Config.bar.height, etc.
-    property var data: ({
-        theme: {
-            colorScheme: "dark",
-            accent: "#cba6f7",
-            font: "JetBrainsMono Nerd Font",
-            fontSize: 13,
-            borderRadius: 12,
-            borderWidth: 2,
-            opacity: 0.85
-        },
-        bar: {
-            height: 36,
-            position: "top",
-            showClock: true,
-            clockFormat: "HH:mm",
-            showBattery: true,
-            showTray: true,
-            showWorkspaces: true,
-            workspaceCount: 10
-        },
-        launcher: { width: 680, maxResults: 8 },
-        wallpaper: { path: "~/Pictures/wallpaper.jpg" },
-        monitor: { primary: "DP-1" }
-    })
-
-    // Convenience accessors
-    readonly property var theme:    data.theme
-    readonly property var bar:      data.bar
-    readonly property var launcher: data.launcher
-    readonly property var wallpaper: data.wallpaper
-    readonly property var monitor:  data.monitor
-
-    // Watch the config file and reload when it changes
-    FileView {
-        id: configFile
-        path: root.configPath
-        watchChanges: true
-        onTextChanged: root._parse(text)
+    // Path to the user settings file (kept separate from the shell so it survives
+    // shell updates without losing preferences).
+    readonly property string filePath: {
+        const home = StandardPaths.standardLocations(StandardPaths.HomeLocation)[0]
+            .toString().replace(/^file:\/\//, "")
+        return home + "/.config/settings/config.json"
     }
 
-    function _parse(text) {
-        try {
-            const parsed = JSON.parse(text)
-            // Deep merge: keep defaults for any missing keys
-            root.data = Object.assign({}, root.data, parsed)
-        } catch (e) {
-            console.warn("Config: failed to parse", root.configPath, "-", e)
+    // Shorthand aliases — access as Config.appearance, Config.bar, etc.
+    property alias appearance : cfg.appearance
+    property alias profile     : cfg.profile
+    property alias bar         : cfg.bar
+    property alias launcher    : cfg.launcher
+    property alias osd         : cfg.osd
+
+    // True once the config file has been loaded at least once.
+    property bool ready: false
+
+    // Guards against reload loops: we set this when WE write the file so the
+    // onFileChanged signal is ignored for that one cycle.
+    property bool _saving: false
+
+    // Debounce: wait 300 ms after the last external file change before reloading.
+    Timer {
+        id: reloadTimer
+        interval: 300
+        repeat: false
+        onTriggered: {
+            if (!root._saving) view.reload()
+            root._saving = false
         }
     }
 
-    Component.onCompleted: {
-        if (configFile.text.length > 0) root._parse(configFile.text)
+    // Debounce: wait 300 ms after the last property change before writing.
+    Timer {
+        id: writeTimer
+        interval: 300
+        repeat: false
+        onTriggered: {
+            root._saving = true
+            view.writeAdapter()
+        }
+    }
+
+    FileView {
+        id: view
+        path: root.filePath
+        watchChanges: true
+        onFileChanged:    reloadTimer.restart()
+        onAdapterUpdated: writeTimer.restart()
+        onLoaded:         root.ready = true
+        onLoadFailed: error => {
+            // File doesn't exist yet — write defaults so it gets created.
+            if (error === FileViewError.FileNotFound) writeAdapter()
+        }
+
+        JsonAdapter {
+            id: cfg
+
+            // ---------------------------------------------------------------
+            // Appearance
+            // ---------------------------------------------------------------
+            property JsonObject appearance: JsonObject {
+                // Dark mode. Switching this live updates the entire color palette.
+                property bool   dark     : true
+                // Absolute path to the current wallpaper.
+                // Updated by the Wallpaper service when the user picks a new one.
+                property string wallpaper: ""
+            }
+
+            // ---------------------------------------------------------------
+            // Profile
+            // ---------------------------------------------------------------
+            property JsonObject profile: JsonObject {
+                // Path to the user avatar image shown in the control center.
+                property string picture: ""
+            }
+
+            // ---------------------------------------------------------------
+            // Bar
+            // ---------------------------------------------------------------
+            property JsonObject bar: JsonObject {
+                property int height: 36
+
+                property JsonObject workspaces: JsonObject {
+                    property int  count: 10
+                    property bool show : true
+                }
+
+                property JsonObject clock: JsonObject {
+                    property bool   show  : true
+                    // Qt time format string — https://doc.qt.io/qt-6/qtime.html#toString
+                    property string format: "HH:mm"
+                }
+
+                property JsonObject systray: JsonObject {
+                    property bool show: true
+                }
+
+                property JsonObject battery: JsonObject {
+                    property bool show: true
+                }
+            }
+
+            // ---------------------------------------------------------------
+            // Launcher
+            // ---------------------------------------------------------------
+            property JsonObject launcher: JsonObject {
+                property int width: 680
+            }
+
+            // ---------------------------------------------------------------
+            // OSD (on-screen display — volume / brightness)
+            // ---------------------------------------------------------------
+            property JsonObject osd: JsonObject {
+                // How long (ms) the OSD stays visible after the last change.
+                property int timeout: 2000
+            }
+        }
     }
 }

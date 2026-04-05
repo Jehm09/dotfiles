@@ -1,0 +1,69 @@
+{
+  "settings": {
+    "title": "Settings",
+    "appearance": {
+      "title": "Appearance",
+      "darkMode": "Dark mode",
+      "wallpaper": "Wallpaper",
+      "wallpaperPlaceholder": "Path to image…",
+      "wallpaperBrowse": "Browse",
+      "profilePicture": "Profile picture",
+      "profilePicturePlaceholder": "Path to image…",
+      "profilePictureBrowse": "Browse"
+    },
+    "bar": {
+      "title": "Bar",
+      "height": "Height",
+      "workspaces": "Workspaces",
+      "workspacesCount": "Count",
+      "showWorkspaces": "Show workspaces",
+      "showClock": "Show clock",
+      "clockFormat": "Clock format",
+      "showSystray": "Show system tray",
+      "showBattery": "Show battery"
+    },
+    "launcher": {
+      "title": "Launcher",
+      "width": "Width"
+    },
+    "osd": {
+      "title": "On-screen display",
+      "timeout": "Timeout (ms)"
+    }
+  },
+  "bar": {
+    "workspaces": "Workspaces",
+    "clock": "Clock",
+    "systray": "System tray",
+    "battery": "Battery",
+    "batteryCharging": "Charging",
+    "batteryFull": "Full"
+  },
+  "launcher": {
+    "placeholder": "Search apps…",
+    "noResults": "No results"
+  },
+  "osd": {
+    "volume": "Volume",
+    "brightness": "Brightness",
+    "muted": "Muted"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "empty": "No notifications",
+    "clearAll": "Clear all",
+    "close": "Close"
+  },
+  "controlcenter": {
+    "title": "Control Center",
+    "settings": "Settings",
+    "darkMode": "Dark mode",
+    "wifi": "Wi-Fi",
+    "bluetooth": "Bluetooth",
+    "doNotDisturb": "Do not disturb",
+    "logout": "Log out",
+    "reboot": "Reboot",
+    "shutdown": "Shut down",
+    "lock": "Lock"
+  }
+}

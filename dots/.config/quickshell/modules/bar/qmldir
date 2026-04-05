@@ -1,0 +1,2 @@
+module qs.modules.bar
+BarWindow 1.0 BarWindow.qml

@@ -1,31 +1,32 @@
 {
-  "theme": {
-    "colorScheme": "dark",
-    "accent": "#cba6f7",
-    "font": "JetBrainsMono Nerd Font",
-    "fontSize": 13,
-    "borderRadius": 12,
-    "borderWidth": 2,
-    "opacity": 0.85
+  "appearance": {
+    "dark": true,
+    "wallpaper": ""
+  },
+  "profile": {
+    "picture": ""
   },
   "bar": {
     "height": 36,
-    "position": "top",
-    "showClock": true,
-    "clockFormat": "HH:mm",
-    "showBattery": true,
-    "showTray": true,
-    "showWorkspaces": true,
-    "workspaceCount": 10
+    "workspaces": {
+      "count": 10,
+      "show": true
+    },
+    "clock": {
+      "show": true,
+      "format": "HH:mm"
+    },
+    "systray": {
+      "show": true
+    },
+    "battery": {
+      "show": true
+    }
   },
   "launcher": {
-    "width": 680,
-    "maxResults": 8
+    "width": 680
   },
-  "wallpaper": {
-    "path": "~/Pictures/wallpaper.jpg"
-  },
-  "monitor": {
-    "primary": "DP-1"
+  "osd": {
+    "timeout": 2000
   }
 }

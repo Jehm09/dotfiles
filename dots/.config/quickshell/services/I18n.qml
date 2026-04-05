@@ -1,52 +1,57 @@
-// I18n - singleton for UI string translations.
-// Reads ~/.config/settings/i18n/en.json (or the active locale file).
-// Usage: I18n.t("launcher.placeholder")  or  I18n.t("session.logout")
-
 pragma Singleton
+pragma ComponentBehavior: Bound
 
 import QtQuick
 import Quickshell
 import Quickshell.Io
 
-QtObject {
+// I18n — loads translation strings from i18n/<lang>.json.
+//
+// Usage:
+//   import qs.services
+//   text: I18n.s("bar.clock")
+//
+// Translations live in dots/.config/quickshell/i18n/<lang>.json.
+// Only "en" is shipped; the file is resolved relative to shell.qml at startup.
+//
+Singleton {
     id: root
 
-    // Active locale - change to "es" to load es.json etc.
-    property string locale: "en"
+    // Flat key→string map built from the JSON tree.
+    property var _strings: ({})
 
-    readonly property string i18nDir: Quickshell.env("HOME") + "/.config/settings/i18n/"
-    readonly property string filePath: i18nDir + locale + ".json"
+    // Returns the translation for a dotted key, e.g. "settings.appearance.darkMode".
+    // Falls back to the key itself if not found.
+    function s(key: string): string {
+        return root._strings[key] ?? key
+    }
 
-    // Raw translation strings object
-    property var strings: ({})
+    // Resolve path relative to the QML component file location.
+    readonly property string _filePath: Qt.resolvedUrl("../i18n/en.json")
+        .toString().replace(/^file:\/\//, "")
+
+    function _flatten(obj, prefix) {
+        for (const [k, v] of Object.entries(obj)) {
+            const full = prefix ? prefix + "." + k : k
+            if (typeof v === "object" && v !== null)
+                _flatten(v, full)
+            else
+                root._strings[full] = v
+        }
+    }
 
     FileView {
-        id: localeFile
-        path: root.filePath
-        watchChanges: true
-        onTextChanged: root._parse(text)
-    }
-
-    // Resolve a dot-notation key like "launcher.tabs.apps"
-    function t(key) {
-        const parts = key.split(".")
-        let node = root.strings
-        for (const part of parts) {
-            if (node === undefined || node === null) return key
-            node = node[part]
+        id: langFile
+        path: root._filePath
+        onLoaded: {
+            try {
+                const flat = {}
+                root._strings = flat
+                root._flatten(JSON.parse(langFile.text()), "")
+            } catch (e) {
+                console.warn("[I18n] Failed to parse translation file:", e.toString())
+            }
         }
-        return (typeof node === "string") ? node : key
-    }
-
-    function _parse(text) {
-        try {
-            root.strings = JSON.parse(text)
-        } catch (e) {
-            console.warn("I18n: failed to parse", root.filePath, "-", e)
-        }
-    }
-
-    Component.onCompleted: {
-        if (localeFile.text.length > 0) root._parse(localeFile.text)
+        onLoadFailed: console.warn("[I18n] Translation file not found:", root._filePath)
     }
 }

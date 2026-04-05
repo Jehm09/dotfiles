@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# Setup CLI for the dotfiles system.
+# Single entry point for all install and configuration tasks.
+#
+# Usage: ./setup <subcommand> [options]
+
+cd "$(dirname "$0")"
+REPO_ROOT="$(pwd)"
+export REPO_ROOT
+
+source "$REPO_ROOT/lib/utils.sh"
+
+# ------------------------------------------------------------------
+# Help
+# ------------------------------------------------------------------
+_showhelp() {
+    cat <<EOF
+
+Setup for the dotfiles system.
+
+Usage: $0 <subcommand> [options]
+
+Subcommands:
+    arch          Full Arch Linux install from the live ISO  (run as root)
+    desktop       Install Hyprland desktop on existing Arch  (interactive)
+    dotfiles      Link or unlink dotfiles to ~/.config
+
+Aliases:
+    dots          Alias for 'dotfiles'
+    uninstall     Alias for 'dotfiles --unlink'
+
+Examples:
+    $0 arch                       Full automated Arch install from ISO
+    $0 desktop                    Interactive component selection
+    $0 desktop --all              Install everything (including hardware drivers)
+    $0 desktop --skip-aur         Skip AUR packages
+    $0 desktop --dotfiles         Only link dotfiles
+    $0 dotfiles                   Link dotfiles to ~/.config
+    $0 dotfiles --dry-run         Preview what would happen
+    $0 dotfiles --unlink          Remove managed symlinks
+    $0 uninstall                  Alias for 'dotfiles --unlink'
+
+For subcommand help:
+    $0 desktop --help
+
+EOF
+}
+
+# ------------------------------------------------------------------
+# Subcommand dispatch
+# ------------------------------------------------------------------
+case "${1:-}" in
+    arch)
+        shift
+        if [[ "$EUID" -ne 0 ]]; then
+            error "'setup arch' must run as root from the Arch live ISO."
+            exit 1
+        fi
+        source "$REPO_ROOT/cmd/arch/run.sh" "$@"
+        ;;
+
+    desktop)
+        shift
+        prevent_root
+        source "$REPO_ROOT/cmd/desktop.sh" "$@"
+        ;;
+
+    dotfiles|dots)
+        shift
+        bash "$REPO_ROOT/lib/symlink.sh" "$@"
+        ;;
+
+    uninstall)
+        bash "$REPO_ROOT/lib/symlink.sh" --unlink
+        ;;
+
+    ""|-h|--help|help)
+        _showhelp
+        ;;
+
+    *)
+        error "Unknown subcommand: $1"
+        _showhelp
+        exit 1
+        ;;
+esac
