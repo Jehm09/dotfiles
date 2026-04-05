@@ -138,71 +138,81 @@ case "$MODE" in
     2)
         mapfile -t PARTS < <(lsblk -ln -o NAME,TYPE | awk '$2=="part"{print $1}')
 
-        if [[ ${#PARTS[@]} -eq 0 ]]; then
-            echo "ERROR: No partitions found."
-            exit 1
-        fi
-
-        # Show numbered list with size/fstype info
+        # Show numbered list with size/fstype/disk info
         echo ""
-        echo "Available partitions:"
+        echo "Available partitions (Enter nothing to skip deletion and use existing free space):"
         echo ""
         for i in "${!PARTS[@]}"; do
-            info=$(lsblk -n -o SIZE,FSTYPE,LABEL "/dev/${PARTS[$i]}" 2>/dev/null | head -1)
-            printf "  %2d) %s  %s\n" "$((i+1))" "${PARTS[$i]}" "$info"
+            disk=$(lsblk -ln -o PKNAME "/dev/${PARTS[$i]}" 2>/dev/null)
+            info=$(lsblk -ln -o SIZE,FSTYPE,LABEL "/dev/${PARTS[$i]}" 2>/dev/null | head -1)
+            printf "  %2d) %-12s disk: %-8s %s\n" "$((i+1))" "${PARTS[$i]}" "$disk" "$info"
         done
         echo ""
 
-        # Multi-select: user types numbers separated by spaces
-        read -rp "Numbers of partitions to DELETE (space-separated, e.g. 3 4): " -a SELECTIONS
+        # Multi-select: Enter with no input = skip deletion
+        read -rp "Numbers of partitions to DELETE (space-separated, Enter to skip): " -ra SELECTIONS
 
-        [[ ${#SELECTIONS[@]} -gt 0 ]] || { echo "No partitions selected. Aborted."; exit 1; }
-
-        # Resolve selections → device names
         declare -a TO_DELETE=()
-        for sel in "${SELECTIONS[@]}"; do
-            idx=$((sel - 1))
-            if [[ $idx -lt 0 || $idx -ge ${#PARTS[@]} ]]; then
-                echo "ERROR: '$sel' is not a valid number."
+
+        if [[ ${#SELECTIONS[@]} -gt 0 ]]; then
+            # Resolve selections → device names
+            for sel in "${SELECTIONS[@]}"; do
+                idx=$((sel - 1))
+                if [[ $idx -lt 0 || $idx -ge ${#PARTS[@]} ]]; then
+                    echo "ERROR: '$sel' is not a valid number."
+                    exit 1
+                fi
+                TO_DELETE+=("${PARTS[$idx]}")
+            done
+
+            # Validate all partitions are on the same disk
+            declare -a PARENT_DISKS=()
+            for part in "${TO_DELETE[@]}"; do
+                disk=$(lsblk -ln -o PKNAME "/dev/$part" 2>/dev/null)
+                [[ -n "$disk" ]] || { echo "ERROR: could not determine parent disk of $part."; exit 1; }
+                PARENT_DISKS+=("$disk")
+            done
+
+            mapfile -t UNIQUE_DISKS < <(printf '%s\n' "${PARENT_DISKS[@]}" | sort -u)
+            if [[ ${#UNIQUE_DISKS[@]} -ne 1 ]]; then
+                echo "ERROR: selected partitions span multiple disks (${UNIQUE_DISKS[*]})."
+                echo "       All partitions to delete must be on the same disk."
                 exit 1
             fi
-            TO_DELETE+=("${PARTS[$idx]}")
-        done
 
-        # Validate all partitions are on the same disk
-        declare -a PARENT_DISKS=()
-        for part in "${TO_DELETE[@]}"; do
-            disk=$(lsblk -n -o PKNAME "/dev/$part" 2>/dev/null)
-            [[ -n "$disk" ]] || { echo "ERROR: could not determine parent disk of $part."; exit 1; }
-            PARENT_DISKS+=("$disk")
-        done
-
-        mapfile -t UNIQUE_DISKS < <(printf '%s\n' "${PARENT_DISKS[@]}" | sort -u)
-        if [[ ${#UNIQUE_DISKS[@]} -ne 1 ]]; then
-            echo "ERROR: selected partitions span multiple disks (${UNIQUE_DISKS[*]})."
-            echo "       All partitions to delete must be on the same disk."
-            exit 1
+            TARGET="/dev/${UNIQUE_DISKS[0]}"
+        else
+            # No partitions to delete — ask which disk has the free space
+            echo "No partitions selected. Which disk has the free space to use?"
+            mapfile -t DISKS < <(lsblk -ldn -o NAME)
+            PS3="Disk: "
+            select DISK in "${DISKS[@]}"; do
+                [[ -n "$DISK" ]] && break
+            done
+            TARGET="/dev/$DISK"
         fi
 
-        TARGET="/dev/${UNIQUE_DISKS[0]}"
-
-        # Show deletion plan
+        # Show plan
         echo ""
         echo "── Plan ─────────────────────────────────────────────────────"
         echo "  Disk: $TARGET"
-        echo "  Partitions to DELETE:"
-        for part in "${TO_DELETE[@]}"; do
-            info=$(lsblk -n -o SIZE,FSTYPE,LABEL "/dev/$part" 2>/dev/null | head -1)
-            echo "    /dev/$part  $info"
-        done
-        echo "  Then create:"
+        if [[ ${#TO_DELETE[@]} -gt 0 ]]; then
+            echo "  Partitions to DELETE:"
+            for part in "${TO_DELETE[@]}"; do
+                info=$(lsblk -ln -o SIZE,FSTYPE,LABEL "/dev/$part" 2>/dev/null | head -1)
+                echo "    /dev/$part  $info"
+            done
+        else
+            echo "  No partitions deleted — using existing free space"
+        fi
+        echo "  Then create in largest free space:"
         echo "    EFI   ${EFI_SIZE} FAT32"
         echo "    root  remaining  $ROOT_FS"
         echo "─────────────────────────────────────────────────────────────"
         read -rp "Type 'yes' to confirm: " CONFIRM
         [[ "$CONFIRM" == "yes" ]] || { echo "Aborted."; exit 1; }
 
-        # Delete selected partitions
+        # Delete selected partitions (if any)
         for part in "${TO_DELETE[@]}"; do
             part_num=$(cat "/sys/class/block/$part/partition" 2>/dev/null) \
                 || part_num=$(echo "$part" | grep -o '[0-9]*$')
@@ -210,12 +220,14 @@ case "$MODE" in
             parted -s "$TARGET" rm "$part_num"
         done
 
-        partprobe "$TARGET"
-        sleep 1
+        if [[ ${#TO_DELETE[@]} -gt 0 ]]; then
+            partprobe "$TARGET"
+            sleep 1
+        fi
 
-        # Show disk state after deletion
+        # Show disk state
         echo ""
-        echo "Disk layout after deletion:"
+        echo "Disk layout on $TARGET:"
         parted -s "$TARGET" unit MiB print free
         echo ""
 
@@ -255,7 +267,7 @@ case "$MODE" in
             | while read -r p; do
                 start=$(cat "/sys/class/block/$p/start" 2>/dev/null || echo 0)
                 echo "$start $p"
-              done \
+                done \
             | sort -n | tail -2 | awk '{print $2}'
         )
 
