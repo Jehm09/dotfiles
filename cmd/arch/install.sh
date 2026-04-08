@@ -38,8 +38,8 @@ done
 # ------------------------------------------------------------------
 # 1. Update live system
 # ------------------------------------------------------------------
-echo "==> Updating live system..."
-pacman -Syu --noconfirm
+# echo "==> Updating live system..."
+# pacman -Syu --noconfirm
 
 # ------------------------------------------------------------------
 # 2. Inject packages from apps.conf into user_configuration.json
