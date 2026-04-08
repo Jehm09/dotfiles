@@ -14,7 +14,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 
 source "$REPO_ROOT/lib/utils.sh"
-source "$REPO_ROOT/lib/detect.sh"
 
 PACKAGES_DIR="$REPO_ROOT/packages"
 
@@ -24,7 +23,6 @@ PACKAGES_DIR="$REPO_ROOT/packages"
 _do_desktop=true
 _do_apps=true
 _do_aur=true
-_do_hardware=false   # opt-in: auto-detects CPU/GPU but risky on existing installs
 _do_services=true
 _do_discord=true
 _do_shell=true
@@ -38,7 +36,6 @@ _flag_noninteractive=false
 for arg in "$@"; do
     case "$arg" in
         --all)
-            _do_hardware=true
             _flag_noninteractive=true
             ;;
         --skip-aur)
@@ -51,8 +48,7 @@ for arg in "$@"; do
             ;;
         --dotfiles)
             _do_desktop=false; _do_apps=false; _do_aur=false
-            _do_hardware=false; _do_services=false
-            _do_discord=false; _do_shell=false
+            _do_services=false; _do_discord=false; _do_shell=false
             _flag_noninteractive=true
             ;;
         -h|--help)
@@ -81,14 +77,13 @@ _print_menu() {
     echo ""
     echo -e "${_CLR_BOLD}Select components to install:${_CLR_RST}"
     echo ""
-    printf "  [%s] 1  Desktop packages   (Hyprland, greetd, Qt6, fonts, theming)\n" "$( [[ $_do_desktop  == true ]] && echo "x" || echo " ")"
-    printf "  [%s] 2  Personal apps      (kitty, fish, nautilus, mpv, yazi...)\n"   "$( [[ $_do_apps     == true ]] && echo "x" || echo " ")"
-    printf "  [%s] 3  AUR packages       (quickshell, asdf-vm, vscode, brave...)\n" "$( [[ $_do_aur      == true ]] && echo "x" || echo " ")"
-    printf "  [%s] 4  Hardware drivers   (CPU microcode, GPU, Wi-Fi, audio)\n"      "$( [[ $_do_hardware == true ]] && echo "x" || echo " ")"
-    printf "  [%s] 5  Services           (seatd, greetd, gnome-keyring, polkit)\n"  "$( [[ $_do_services == true ]] && echo "x" || echo " ")"
-    printf "  [%s] 6  Discord + Equicord\n"                                         "$( [[ $_do_discord  == true ]] && echo "x" || echo " ")"
-    printf "  [%s] 7  Fish as default shell\n"                                      "$( [[ $_do_shell    == true ]] && echo "x" || echo " ")"
-    printf "  [%s] 8  Dotfiles           (~/.config symlinks)\n"                    "$( [[ $_do_dotfiles == true ]] && echo "x" || echo " ")"
+    printf "  [%s] 1  Desktop packages   (Hyprland, greetd, fonts, theming)\n" "$( [[ $_do_desktop  == true ]] && echo "x" || echo " ")"
+    printf "  [%s] 2  Personal apps      (fish, nautilus, mpv, yazi...)\n"    "$( [[ $_do_apps     == true ]] && echo "x" || echo " ")"
+    printf "  [%s] 3  AUR packages       (quickshell, asdf-vm, vscode, brave...)\n" "$( [[ $_do_aur  == true ]] && echo "x" || echo " ")"
+    printf "  [%s] 4  Services           (seatd, greetd, gnome-keyring, polkit)\n"  "$( [[ $_do_services == true ]] && echo "x" || echo " ")"
+    printf "  [%s] 5  Discord + Equicord\n"                                         "$( [[ $_do_discord  == true ]] && echo "x" || echo " ")"
+    printf "  [%s] 6  Fish as default shell\n"                                      "$( [[ $_do_shell    == true ]] && echo "x" || echo " ")"
+    printf "  [%s] 7  Dotfiles           (~/.config symlinks)\n"                    "$( [[ $_do_dotfiles == true ]] && echo "x" || echo " ")"
     echo ""
     echo "  Enter numbers to toggle (e.g. 4 6), or press Enter to confirm:"
 }
@@ -103,11 +98,10 @@ if [[ "$_flag_noninteractive" == false && -t 0 ]]; then
                 1) [[ $_do_desktop  == true ]] && _do_desktop=false  || _do_desktop=true  ;;
                 2) [[ $_do_apps     == true ]] && _do_apps=false      || _do_apps=true     ;;
                 3) [[ $_do_aur      == true ]] && _do_aur=false       || _do_aur=true      ;;
-                4) [[ $_do_hardware == true ]] && _do_hardware=false   || _do_hardware=true ;;
-                5) [[ $_do_services == true ]] && _do_services=false   || _do_services=true ;;
-                6) [[ $_do_discord  == true ]] && _do_discord=false    || _do_discord=true  ;;
-                7) [[ $_do_shell    == true ]] && _do_shell=false      || _do_shell=true    ;;
-                8) [[ $_do_dotfiles == true ]] && _do_dotfiles=false   || _do_dotfiles=true ;;
+                4) [[ $_do_services == true ]] && _do_services=false  || _do_services=true ;;
+                5) [[ $_do_discord  == true ]] && _do_discord=false   || _do_discord=true  ;;
+                6) [[ $_do_shell    == true ]] && _do_shell=false     || _do_shell=true    ;;
+                7) [[ $_do_dotfiles == true ]] && _do_dotfiles=false  || _do_dotfiles=true ;;
             esac
         done
         _print_menu
@@ -125,7 +119,7 @@ trap sudo_stop_keepalive EXIT INT TERM
 # ------------------------------------------------------------------
 # 1. Multilib (needed before any pacman install)
 # ------------------------------------------------------------------
-if [[ $_do_desktop == true || $_do_apps == true ]]; then
+if [[ $_do_desktop == true || $_do_apps == true || $_do_aur == true ]]; then
     multilib_enable
 fi
 
@@ -150,50 +144,28 @@ if [[ $_do_apps == true ]]; then
 fi
 
 # ------------------------------------------------------------------
-# 4. yay + AUR packages
+# 4. paru + AUR packages
 # ------------------------------------------------------------------
 if [[ $_do_aur == true ]]; then
-    step "yay AUR helper"
-    bash "$REPO_ROOT/cmd/yay.sh"
+    step "paru (AUR helper)"
+    if command -v paru &>/dev/null; then
+        info "paru already installed, skipping"
+    else
+        PARU_TMP=$(mktemp -d)
+        trap 'rm -rf "$PARU_TMP"' EXIT
+        git clone https://aur.archlinux.org/paru.git "$PARU_TMP"
+        (cd "$PARU_TMP" && makepkg -si --noconfirm)
+        success "paru installed"
+    fi
 
     step "AUR packages"
     mapfile -t _pkgs < <(parse_packages "$PACKAGES_DIR/aur.conf")
-    yay -S --needed --noconfirm "${_pkgs[@]}"
+    paru -S --needed --noconfirm "${_pkgs[@]}"
     success "AUR packages installed"
 fi
 
 # ------------------------------------------------------------------
-# 5. Hardware drivers
-# ------------------------------------------------------------------
-if [[ $_do_hardware == true ]]; then
-    step "Hardware drivers"
-    detect_cpu
-    detect_gpu
-
-    info "CPU: $CPU_BRAND  |  GPU: Intel=$HAS_INTEL_GPU AMD=$HAS_AMD_GPU NVIDIA=$HAS_NVIDIA_GPU"
-
-    _install_hw() {
-        local label="$1" file="$2"
-        [[ -f "$file" ]] || { warn "$file not found, skipping $label"; return; }
-        mapfile -t _pkgs < <(parse_packages "$file")
-        [[ ${#_pkgs[@]} -eq 0 ]] && return
-        info "Installing $label..."
-        sudo pacman -S --needed --noconfirm "${_pkgs[@]}"
-    }
-
-    _install_hw "common hardware"   "$PACKAGES_DIR/hardware/common.conf"
-    [[ "$CPU_BRAND" == "Intel" ]] && _install_hw "Intel microcode"  "$PACKAGES_DIR/hardware/cpu-intel.conf"
-    [[ "$CPU_BRAND" == "AMD"   ]] && _install_hw "AMD microcode"    "$PACKAGES_DIR/hardware/cpu-amd.conf"
-    $HAS_INTEL_GPU  && _install_hw "Intel GPU drivers"  "$PACKAGES_DIR/hardware/gpu-intel.conf"
-    $HAS_AMD_GPU    && _install_hw "AMD GPU drivers"    "$PACKAGES_DIR/hardware/gpu-amd.conf"
-    $HAS_NVIDIA_GPU && _install_hw "NVIDIA GPU drivers" "$PACKAGES_DIR/hardware/gpu-nvidia.conf"
-    is_laptop       && _install_hw "laptop power mgmt"  "$PACKAGES_DIR/hardware/laptop.conf"
-
-    success "Hardware drivers installed"
-fi
-
-# ------------------------------------------------------------------
-# 6. Services
+# 5. Services
 # ------------------------------------------------------------------
 if [[ $_do_services == true ]]; then
     step "Services"
@@ -265,7 +237,7 @@ EOF
 fi
 
 # ------------------------------------------------------------------
-# 7. Discord + Equicord (packages come from aur.conf; this applies the patch)
+# 6. Discord + Equicord (packages come from aur.conf; this applies the patch)
 # ------------------------------------------------------------------
 if [[ $_do_discord == true ]]; then
     step "Discord + Equicord"
@@ -279,7 +251,7 @@ if [[ $_do_discord == true ]]; then
 fi
 
 # ------------------------------------------------------------------
-# 8. Fish as default shell
+# 7. Fish as default shell
 # ------------------------------------------------------------------
 if [[ $_do_shell == true ]]; then
     step "Default shell"
@@ -302,7 +274,7 @@ if [[ $_do_shell == true ]]; then
 fi
 
 # ------------------------------------------------------------------
-# 9. Dotfiles
+# 8. Dotfiles
 # ------------------------------------------------------------------
 if [[ $_do_dotfiles == true ]]; then
     step "Dotfiles"

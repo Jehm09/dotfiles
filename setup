@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
-# Setup CLI for the dotfiles system.
-# Single entry point for all install and configuration tasks.
+# Setup CLI — single entry point for all install and configuration tasks.
+#
+# Fresh Arch install flow:
+#   1. Boot the Arch ISO, clone this repo, run:  setup install
+#   2. After first reboot, run:                  setup post
+#
+# On an existing Arch system:
+#   setup desktop    — install the full Hyprland desktop interactively
+#   setup dotfiles   — only link ~/.config symlinks
 #
 # Usage: ./setup <subcommand> [options]
 
@@ -21,27 +28,27 @@ Setup for the dotfiles system.
 Usage: $0 <subcommand> [options]
 
 Subcommands:
-    arch          Full Arch Linux install from the live ISO  (run as root)
-    desktop       Install Hyprland desktop on existing Arch  (interactive)
-    dotfiles      Link or unlink dotfiles to ~/.config
+    install       Arch Linux install from the live ISO  (run as root)
+                  Runs: pacman -Syu → inject packages → archinstall
+
+    post          Post-install setup after first boot  (run as your user)
+                  Runs: multilib → paru → AUR packages → hooks → dotfiles → fish
+
+    desktop       Install Hyprland desktop on an existing Arch system
+    dotfiles      Link dotfiles to ~/.config (or use --dry-run / --unlink)
 
 Aliases:
     dots          Alias for 'dotfiles'
-    uninstall     Alias for 'dotfiles --unlink'
 
 Examples:
-    $0 arch                       Full automated Arch install from ISO
+    $0 install                    Full automated Arch install from ISO
+    $0 post                       Post-install: AUR, hooks, dotfiles, shell
     $0 desktop                    Interactive component selection
-    $0 desktop --all              Install everything (including hardware drivers)
+    $0 desktop --all              Install everything non-interactively
     $0 desktop --skip-aur         Skip AUR packages
-    $0 desktop --dotfiles         Only link dotfiles
     $0 dotfiles                   Link dotfiles to ~/.config
     $0 dotfiles --dry-run         Preview what would happen
     $0 dotfiles --unlink          Remove managed symlinks
-    $0 uninstall                  Alias for 'dotfiles --unlink'
-
-For subcommand help:
-    $0 desktop --help
 
 EOF
 }
@@ -50,13 +57,19 @@ EOF
 # Subcommand dispatch
 # ------------------------------------------------------------------
 case "${1:-}" in
-    arch)
+    install)
         shift
         if [[ "$EUID" -ne 0 ]]; then
-            error "'setup arch' must run as root from the Arch live ISO."
+            error "'setup install' must run as root from the Arch live ISO."
             exit 1
         fi
-        source "$REPO_ROOT/cmd/arch/run.sh" "$@"
+        bash "$REPO_ROOT/cmd/arch/install.sh" "$@"
+        ;;
+
+    post)
+        shift
+        prevent_root
+        bash "$REPO_ROOT/cmd/arch/post-install.sh" "$@"
         ;;
 
     desktop)
@@ -68,10 +81,6 @@ case "${1:-}" in
     dotfiles|dots)
         shift
         bash "$REPO_ROOT/lib/symlink.sh" "$@"
-        ;;
-
-    uninstall)
-        bash "$REPO_ROOT/lib/symlink.sh" --unlink
         ;;
 
     ""|-h|--help|help)
