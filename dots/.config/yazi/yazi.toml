@@ -1,0 +1,20 @@
+[opener]
+
+image = [
+  { run = 'viewnior "$@"', desc = "Viewnior", block = false }
+]
+
+code = [
+  { run = 'code "$@"', desc = "VS Code", block = false }
+]
+
+video = [
+  { run = 'mpv "$@"', block = false }
+]
+
+[open]
+rules = [
+  { mime = "image/*", use = "image" },
+  { mime = "text/*", use = "code" },
+  { mime = "video/*", use = "video" }
+]

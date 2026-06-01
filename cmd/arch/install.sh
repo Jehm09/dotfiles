@@ -47,10 +47,11 @@ done
 # ------------------------------------------------------------------
 echo "==> Syncing packages from apps.conf into archinstall config..."
 
-# Parse apps.conf: strip comments, blank lines, and inline comments
+# Parse apps.conf: official-repo section only (stops at the "## AUR only" marker).
+# AUR packages below that line cannot be installed by archinstall and are
+# handled by post-install.sh instead.
 mapfile -t CONF_PKGS < <(
-    grep -v '^\s*#' "$APPS_CONF" \
-    | awk 'NF {print $1}' \
+    awk '/^# AUR only/{exit} !/^\s*#/ && NF {print $1}' "$APPS_CONF" \
     | grep -v '^$'
 )
 
@@ -90,5 +91,5 @@ echo "==> Installation complete."
 echo ""
 echo "Next steps:"
 echo "  1. Reboot into the new system"
-echo "  2. Log in and run:  setup post-install"
+echo "  2. Log in and run:  setup post"
 echo "     (installs AUR helper, multilib, dotfiles, remaining packages)"

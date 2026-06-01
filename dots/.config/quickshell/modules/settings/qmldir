@@ -1,3 +1,0 @@
-module qs.modules.settings
-SettingsWindow 1.0 SettingsWindow.qml
-SettingsPanel  1.0 SettingsPanel.qml

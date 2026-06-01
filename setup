@@ -5,17 +5,13 @@
 #   1. Boot the Arch ISO, clone this repo, run:  setup install
 #   2. After first reboot, run:                  setup post
 #
-# On an existing Arch system:
-#   setup desktop    — install the full Hyprland desktop interactively
-#   setup dotfiles   — only link ~/.config symlinks
-#
-# Usage: ./setup <subcommand> [options]
+# Usage: ./setup [subcommand] [options]
 
 cd "$(dirname "$0")"
 REPO_ROOT="$(pwd)"
 export REPO_ROOT
 
-source "$REPO_ROOT/lib/utils.sh"
+source "$REPO_ROOT/cmd/lib/utils.sh"
 
 # ------------------------------------------------------------------
 # Help
@@ -29,12 +25,11 @@ Usage: $0 <subcommand> [options]
 
 Subcommands:
     install       Arch Linux install from the live ISO  (run as root)
-                  Runs: pacman -Syu → inject packages → archinstall
+                  Runs: inject packages → archinstall
 
     post          Post-install setup after first boot  (run as your user)
-                  Runs: multilib → paru → AUR packages → hooks → dotfiles → fish
+                  Runs: multilib → AUR helper → AUR packages → greeter → hooks → dotfiles → fish
 
-    desktop       Install Hyprland desktop on an existing Arch system
     dotfiles      Link dotfiles to ~/.config (or use --dry-run / --unlink)
 
 Aliases:
@@ -42,15 +37,37 @@ Aliases:
 
 Examples:
     $0 install                    Full automated Arch install from ISO
-    $0 post                       Post-install: AUR, hooks, dotfiles, shell
-    $0 desktop                    Interactive component selection
-    $0 desktop --all              Install everything non-interactively
-    $0 desktop --skip-aur         Skip AUR packages
+    $0 post                       Post-install: AUR, greeter, hooks, dotfiles, shell
+    $0 post --all                 Run everything without prompting
     $0 dotfiles                   Link dotfiles to ~/.config
     $0 dotfiles --dry-run         Preview what would happen
     $0 dotfiles --unlink          Remove managed symlinks
 
 EOF
+}
+
+# ------------------------------------------------------------------
+# Interactive menu (shown when run without arguments in a terminal)
+# ------------------------------------------------------------------
+_show_menu() {
+    echo ""
+    echo -e "${_CLR_BOLD}  Arch Linux Setup${_CLR_RST}"
+    echo ""
+    echo "    1)  install     Instalación desde Arch ISO  (requiere root)"
+    echo "    2)  post        Post-instalación tras el primer arranque"
+    echo "    3)  dotfiles    Enlazar ~/.config"
+    echo ""
+    echo "    0)  Salir"
+    echo ""
+    read -rp "  Opción: " _opt
+    echo ""
+    case "$_opt" in
+        1) exec "$REPO_ROOT/setup" install  ;;
+        2) exec "$REPO_ROOT/setup" post     ;;
+        3) exec "$REPO_ROOT/setup" dotfiles ;;
+        0|"") exit 0                        ;;
+        *) error "Opción inválida: $_opt"; exit 1 ;;
+    esac
 }
 
 # ------------------------------------------------------------------
@@ -72,19 +89,21 @@ case "${1:-}" in
         bash "$REPO_ROOT/cmd/arch/post-install.sh" "$@"
         ;;
 
-    desktop)
-        shift
-        prevent_root
-        source "$REPO_ROOT/cmd/desktop.sh" "$@"
-        ;;
-
     dotfiles|dots)
         shift
-        bash "$REPO_ROOT/lib/symlink.sh" "$@"
+        bash "$REPO_ROOT/cmd/lib/symlink.sh" "$@"
         ;;
 
-    ""|-h|--help|help)
+    -h|--help|help)
         _showhelp
+        ;;
+
+    "")
+        if [[ -t 0 ]]; then
+            _show_menu
+        else
+            _showhelp
+        fi
         ;;
 
     *)
