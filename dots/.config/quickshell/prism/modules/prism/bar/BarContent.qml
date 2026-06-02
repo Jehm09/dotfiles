@@ -319,6 +319,11 @@ Item { // Bar content region
                 invertSide: Config?.options.bar.bottom
             }
 
+            MinimizedTray {
+                Layout.fillHeight: true
+                Layout.rightMargin: 15
+            }
+
             Item {
                 Layout.fillWidth: true
                 Layout.fillHeight: true

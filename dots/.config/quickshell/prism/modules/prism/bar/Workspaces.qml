@@ -84,13 +84,15 @@ Item {
     implicitWidth: root.vertical ? Appearance.sizes.verticalBarWidth : (root.workspaceButtonWidth * root.workspacesShown)
     implicitHeight: root.vertical ? (root.workspaceButtonWidth * root.workspacesShown) : Appearance.sizes.barHeight
 
-    // Scroll to switch workspaces
+    // Scroll to switch workspaces (uses ~/.config/hypr/hyprland/scripts/workspaces/move.sh
+    // so it shares the per-monitor group/slot logic with the SUPER+scroll keybind in keybinds.lua)
     WheelHandler {
         onWheel: (event) => {
-            if (event.angleDelta.y < 0)
-                Hyprland.dispatch(`hl.dsp.focus({workspace = "r+1"})`);
-            else if (event.angleDelta.y > 0)
-                Hyprland.dispatch(`hl.dsp.focus({workspace = "r-1"})`);
+            // Scroll up -> previous slot (decrease), scroll down -> next slot (increase)
+            const dir = event.angleDelta.y > 0 ? "-1" : "+1";
+            Quickshell.execDetached(["bash", "-c",
+                `$HOME/.config/hypr/hyprland/scripts/workspaces/move.sh --action focus --slot-dir ${dir}`
+            ]);
         }
         acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
     }
