@@ -1,0 +1,12 @@
+diff --git a/dots/.config/quickshell/ii/scripts/videos/record.sh b/dots/.config/quickshell/ii/scripts/videos/record.sh
+index bf0ab504..378e827a 100755
+--- a/dots/.config/quickshell/ii/scripts/videos/record.sh
++++ b/dots/.config/quickshell/ii/scripts/videos/record.sh
+@@ -1,6 +1,6 @@
+ #!/usr/bin/env bash
+ 
+-CONFIG_FILE="$HOME/.config/illogical-impulse/config.json"
++CONFIG_FILE="$HOME/.config/settings/quickshell/config.json"
+ JSON_PATH=".screenRecord.savePath"
+ 
+ CUSTOM_PATH=$(jq -r "$JSON_PATH" "$CONFIG_FILE" 2>/dev/null)

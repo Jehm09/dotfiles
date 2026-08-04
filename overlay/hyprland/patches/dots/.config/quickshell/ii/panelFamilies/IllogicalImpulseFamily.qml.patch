@@ -1,0 +1,24 @@
+diff --git a/dots/.config/quickshell/ii/panelFamilies/IllogicalImpulseFamily.qml b/dots/.config/quickshell/ii/panelFamilies/IllogicalImpulseFamily.qml
+index 61a901fa..52246cae 100644
+--- a/dots/.config/quickshell/ii/panelFamilies/IllogicalImpulseFamily.qml
++++ b/dots/.config/quickshell/ii/panelFamilies/IllogicalImpulseFamily.qml
+@@ -15,9 +15,7 @@ import qs.modules.ii.overview
+ import qs.modules.ii.polkit
+ import qs.modules.ii.regionSelector
+ import qs.modules.ii.screenCorners
+-import qs.modules.ii.screenTranslator
+ import qs.modules.ii.sessionScreen
+-import qs.modules.ii.sidebarLeft
+ import qs.modules.ii.sidebarRight
+ import qs.modules.ii.overlay
+ import qs.modules.ii.verticalBar
+@@ -38,9 +36,7 @@ Scope {
+     PanelLoader { component: Polkit {} }
+     PanelLoader { component: RegionSelector {} }
+     PanelLoader { component: ScreenCorners {} }
+-    PanelLoader { component: ScreenTranslator {} }
+     PanelLoader { component: SessionScreen {} }
+-    PanelLoader { component: SidebarLeft {} }
+     PanelLoader { component: SidebarRight {} }
+     PanelLoader { extraCondition: Config.options.bar.vertical; component: VerticalBar {} }
+     PanelLoader { component: WallpaperSelector {} }

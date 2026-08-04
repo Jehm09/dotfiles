@@ -1,0 +1,34 @@
+# Python virtualenv for the Quickshell helper scripts.
+#
+# Installed by 'setup post' into ~/.local/state/quickshell/.venv, which
+# hypr/hyprland/env.lua exports as ILLOGICAL_IMPULSE_VIRTUAL_ENV.
+#
+# Consumers:
+#   quickshell/ii/scripts/colors/generate_colors_material.py   material palette
+#   quickshell/ii/scripts/colors/switchwall.sh                  wallpaper switch
+#   quickshell/ii/scripts/images/{find-regions,least-busy-region,text-color}-venv.sh
+#   quickshell/ii/scripts/thumbnails/thumbgen-venv.sh
+#
+# Kept in sync with sdata/uv/requirements.in upstream; check it after a
+# 'setup upstream update' if a colour or thumbnail script starts failing.
+
+build
+pillow
+setuptools-scm
+wheel
+pywayland
+psutil
+kde-material-you-colors
+materialyoucolor
+libsass
+material-color-utilities
+setproctitle
+click
+loguru
+pycairo
+pygobject
+tqdm
+numpy
+opencv-contrib-python
+google-auth
+requests

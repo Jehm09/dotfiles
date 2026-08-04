@@ -1,0 +1,12 @@
+diff --git a/dots/.config/quickshell/ii/modules/common/Appearance.qml b/dots/.config/quickshell/ii/modules/common/Appearance.qml
+index bedf01eb..8fe54cf3 100644
+--- a/dots/.config/quickshell/ii/modules/common/Appearance.qml
++++ b/dots/.config/quickshell/ii/modules/common/Appearance.qml
+@@ -34,6 +34,7 @@ Singleton {
+     property real backgroundTransparency: Config?.options.appearance.transparency.enable ? Config?.options.appearance.transparency.automatic ? autoBackgroundTransparency : Config?.options.appearance.transparency.backgroundTransparency : 0
+     property real contentTransparency: Config?.options.appearance.transparency.automatic ? autoContentTransparency : Config?.options.appearance.transparency.contentTransparency
+ 
++
+     m3colors: QtObject {
+         property bool darkmode: true
+         property bool transparent: false

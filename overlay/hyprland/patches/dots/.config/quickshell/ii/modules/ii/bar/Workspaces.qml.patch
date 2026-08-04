@@ -1,0 +1,21 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/bar/Workspaces.qml b/dots/.config/quickshell/ii/modules/ii/bar/Workspaces.qml
+index 34b2c573..d2d55dea 100644
+--- a/dots/.config/quickshell/ii/modules/ii/bar/Workspaces.qml
++++ b/dots/.config/quickshell/ii/modules/ii/bar/Workspaces.qml
+@@ -69,11 +69,12 @@ ButtonMouseArea {
+         else if (mouse.button == Qt.BackButton) 
+             toggleSpecial()
+     }
++    // Scrolling goes through hypr/hyprland/scripts/workspaces/move.sh instead of a
++    // relative dispatch, so it shares the per-monitor group/slot logic with the
++    // SUPER+scroll keybind in keybinds.lua.
+     onWheel: event => {
+-        if (event.angleDelta.y < 0)
+-            Hyprland.dispatch(`hl.dsp.focus({workspace = "r+1"})`);
+-        else if (event.angleDelta.y > 0)
+-            Hyprland.dispatch(`hl.dsp.focus({workspace = "r-1"})`);
++        const dir = event.angleDelta.y > 0 ? "-1" : "+1";
++        Quickshell.execDetached(["bash", "-c", `$HOME/.config/hypr/hyprland/scripts/workspaces/move.sh --action focus --slot-dir ${dir}`]);
+     }
+ 
+     // Indications

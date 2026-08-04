@@ -1,0 +1,35 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml b/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml
+index 3bec7589..8fc855ca 100644
+--- a/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml
++++ b/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml
+@@ -62,10 +62,6 @@ Item { // Bar content region
+         onScrollDown: Brightness.decreaseBrightness()
+         onScrollUp: Brightness.increaseBrightness()
+         onMovedAway: GlobalStates.osdBrightnessOpen = false
+-        onPressed: event => {
+-            if (event.button === Qt.LeftButton)
+-                GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen;
+-        }
+ 
+         // Visual content
+         ScrollHint {
+@@ -86,7 +82,6 @@ Item { // Bar content region
+                 id: leftSidebarButton
+                 Layout.alignment: Qt.AlignVCenter
+                 Layout.leftMargin: Appearance.rounding.screenRounding
+-                colBackground: barLeftSideMouseArea.hovered ? Appearance.colors.colLayer1Hover : ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 1)
+             }
+ 
+             ActiveWindow {
+@@ -324,6 +319,11 @@ Item { // Bar content region
+                 invertSide: Config?.options.bar.bottom
+             }
+ 
++            MinimizedTray {
++                Layout.fillHeight: true
++                Layout.rightMargin: 15
++            }
++
+             Item {
+                 Layout.fillWidth: true
+                 Layout.fillHeight: true

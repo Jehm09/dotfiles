@@ -1,0 +1,170 @@
+diff --git a/dots/.config/quickshell/ii/modules/settings/About.qml b/dots/.config/quickshell/ii/modules/settings/About.qml
+index adf1e1b1..b0c68941 100644
+--- a/dots/.config/quickshell/ii/modules/settings/About.qml
++++ b/dots/.config/quickshell/ii/modules/settings/About.qml
+@@ -12,7 +12,7 @@ ContentPage {
+     ContentSection {
+         icon: "box"
+         title: Translation.tr("Distro")
+-        
++
+         RowLayout {
+             Layout.alignment: Qt.AlignHCenter
+             spacing: 20
+@@ -24,7 +24,6 @@ ContentPage {
+             }
+             ColumnLayout {
+                 Layout.alignment: Qt.AlignVCenter
+-                // spacing: 10
+                 StyledText {
+                     text: SystemInfo.distroName
+                     font.pixelSize: Appearance.font.pixelSize.title
+@@ -40,111 +39,51 @@ ContentPage {
+                 }
+             }
+         }
++    }
++
++    ContentSection {
++        icon: "computer"
++        title: Translation.tr("Hardware")
+ 
+-        Flow {
++        ColumnLayout {
+             Layout.fillWidth: true
+-            spacing: 5
++            spacing: 4
+ 
+-            RippleButtonWithIcon {
+-                materialIcon: "auto_stories"
+-                mainText: Translation.tr("Documentation")
+-                onClicked: {
+-                    Qt.openUrlExternally(SystemInfo.documentationUrl)
+-                }
+-            }
+-            RippleButtonWithIcon {
+-                materialIcon: "support"
+-                mainText: Translation.tr("Help & Support")
+-                onClicked: {
+-                    Qt.openUrlExternally(SystemInfo.supportUrl)
+-                }
+-            }
+-            RippleButtonWithIcon {
+-                materialIcon: "bug_report"
+-                mainText: Translation.tr("Report a Bug")
+-                onClicked: {
+-                    Qt.openUrlExternally(SystemInfo.bugReportUrl)
+-                }
+-            }
+-            RippleButtonWithIcon {
+-                materialIcon: "policy"
+-                materialIconFill: false
+-                mainText: Translation.tr("Privacy Policy")
+-                onClicked: {
+-                    Qt.openUrlExternally(SystemInfo.privacyPolicyUrl)
+-                }
+-            }
+-            
+-        }
++            Repeater {
++                model: [
++                    { icon: "terminal",        label: Translation.tr("Kernel"), value: SystemInfo.kernelVersion },
++                    { icon: "memory",          label: Translation.tr("CPU"),    value: SystemInfo.cpuModel },
++                    { icon: "display_settings",label: Translation.tr("GPU"),    value: SystemInfo.gpuModel },
++                    { icon: "memory_alt",      label: Translation.tr("RAM"),    value: SystemInfo.ramTotal },
++                    { icon: "hard_drive",      label: Translation.tr("Disk"),   value: SystemInfo.diskInfo },
++                ]
+ 
+-    }
+-    ContentSection {
+-        icon: "folder_managed"
+-        title: Translation.tr("Dotfiles")
++                delegate: RowLayout {
++                    required property var modelData
++                    Layout.fillWidth: true
++                    spacing: 10
+ 
+-        RowLayout {
+-            Layout.alignment: Qt.AlignHCenter
+-            spacing: 20
+-            Layout.topMargin: 10
+-            Layout.bottomMargin: 10
+-            IconImage {
+-                implicitSize: 80
+-                source: Quickshell.iconPath("illogical-impulse")
+-            }
+-            ColumnLayout {
+-                Layout.alignment: Qt.AlignVCenter
+-                // spacing: 10
+-                StyledText {
+-                    text: Translation.tr("illogical-impulse")
+-                    font.pixelSize: Appearance.font.pixelSize.title
+-                }
+-                StyledText {
+-                    text: "https://github.com/end-4/dots-hyprland"
+-                    font.pixelSize: Appearance.font.pixelSize.normal
+-                    textFormat: Text.MarkdownText
+-                    onLinkActivated: (link) => {
+-                        Qt.openUrlExternally(link)
++                    MaterialSymbol {
++                        text: modelData.icon
++                        iconSize: Appearance.font.pixelSize.large
++                        color: Appearance.colors.colOnLayer1
++                    }
++                    StyledText {
++                        text: modelData.label
++                        font.pixelSize: Appearance.font.pixelSize.normal
++                        color: Appearance.colors.colOnLayer1
++                        Layout.minimumWidth: 50
++                    }
++                    StyledText {
++                        text: modelData.value !== "" ? modelData.value : "…"
++                        font.pixelSize: Appearance.font.pixelSize.normal
++                        color: Appearance.colors.colOnLayer1
++                        opacity: 0.75
++                        Layout.fillWidth: true
++                        elide: Text.ElideRight
+                     }
+-                    PointingHandLinkHover {}
+-                }
+-            }
+-        }
+-
+-        Flow {
+-            Layout.fillWidth: true
+-            spacing: 5
+-
+-            RippleButtonWithIcon {
+-                materialIcon: "auto_stories"
+-                mainText: Translation.tr("Documentation")
+-                onClicked: {
+-                    Qt.openUrlExternally("https://end-4.github.io/dots-hyprland-wiki/en/ii-qs/02usage/")
+-                }
+-            }
+-            RippleButtonWithIcon {
+-                materialIcon: "adjust"
+-                materialIconFill: false
+-                mainText: Translation.tr("Issues")
+-                onClicked: {
+-                    Qt.openUrlExternally("https://github.com/end-4/dots-hyprland/issues")
+-                }
+-            }
+-            RippleButtonWithIcon {
+-                materialIcon: "forum"
+-                mainText: Translation.tr("Discussions")
+-                onClicked: {
+-                    Qt.openUrlExternally("https://github.com/end-4/dots-hyprland/discussions")
+-                }
+-            }
+-            RippleButtonWithIcon {
+-                materialIcon: "favorite"
+-                mainText: Translation.tr("Donate")
+-                onClicked: {
+-                    Qt.openUrlExternally("https://github.com/sponsors/end-4")
+                 }
+             }
+-
+-            
+         }
+     }
+ }

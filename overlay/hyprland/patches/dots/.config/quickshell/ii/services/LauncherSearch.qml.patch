@@ -1,0 +1,65 @@
+diff --git a/dots/.config/quickshell/ii/services/LauncherSearch.qml b/dots/.config/quickshell/ii/services/LauncherSearch.qml
+index 25701fb6..3321d778 100644
+--- a/dots/.config/quickshell/ii/services/LauncherSearch.qml
++++ b/dots/.config/quickshell/ii/services/LauncherSearch.qml
+@@ -33,7 +33,7 @@ Singleton {
+         return acc;
+     }, []).sort()
+ 
+-    // Load user action scripts from ~/.config/illogical-impulse/actions/
++    // Load user action scripts from ~/.config/settings/quickshell/actions/
+     // Uses FolderListModel to auto-reload when scripts are added/removed
+     property var userActionScripts: {
+         const actions = [];
+@@ -74,12 +74,6 @@ Singleton {
+                 Quickshell.execDetached([Directories.wallpaperSwitchScriptPath, "--mode", "dark", "--noswitch"]);
+             }
+         },
+-        {
+-            action: "konachanwallpaper",
+-            execute: () => {
+-                Quickshell.execDetached([Quickshell.shellPath("scripts/colors/random/random_konachan_wall.sh")]);
+-            }
+-        },
+         {
+             action: "light",
+             execute: () => {
+@@ -187,23 +181,28 @@ Singleton {
+                     verb: "",
+                     type: type,
+                     execute: () => {
+-                        Cliphist.copy(entry);
++                        Cliphist.paste(entry);
+                     },
+-                    actions: [resultComp.createObject(null, {
++                    actions: [
++                        resultComp.createObject(null, {
+                             name: Translation.tr("Copy"),
+                             iconName: "content_copy",
+                             iconType: LauncherSearchResult.IconType.Material,
+-                            execute: () => {
+-                                Cliphist.copy(entry);
+-                            }
+-                        }), resultComp.createObject(null, {
++                            execute: () => { Cliphist.copy(entry); }
++                        }),
++                        ...(Cliphist.entryIsImage(entry) ? [resultComp.createObject(null, {
++                            name: Translation.tr("Open"),
++                            iconName: "open_in_new",
++                            iconType: LauncherSearchResult.IconType.Material,
++                            execute: () => { Cliphist.openWithSwappy(entry); }
++                        })] : []),
++                        resultComp.createObject(null, {
+                             name: Translation.tr("Delete"),
+                             iconName: "delete",
+                             iconType: LauncherSearchResult.IconType.Material,
+-                            execute: () => {
+-                                Cliphist.deleteEntry(entry);
+-                            }
+-                        })],
++                            execute: () => { Cliphist.deleteEntry(entry); }
++                        })
++                    ],
+                     blurImage: shouldBlurImage
+                 });
+             }).filter(Boolean);

@@ -1,0 +1,39 @@
+diff --git a/dots/.config/quickshell/ii/services/HyprlandData.qml b/dots/.config/quickshell/ii/services/HyprlandData.qml
+index 5dfedab6..8dd7bb0e 100644
+--- a/dots/.config/quickshell/ii/services/HyprlandData.qml
++++ b/dots/.config/quickshell/ii/services/HyprlandData.qml
+@@ -20,6 +20,8 @@ Singleton {
+     property var workspaceById: ({})
+     property var activeWorkspace: null
+     property var monitors: []
++    // Like `monitors`, but includes disabled monitors (hyprctl monitors all -j)
++    property var allMonitors: []
+     property var layers: ({})
+ 
+     // Convenient stuff
+@@ -56,6 +58,7 @@ Singleton {
+ 
+     function updateMonitors() {
+         getMonitors.running = true;
++        getAllMonitors.running = true;
+     }
+ 
+     function updateWorkspaces() {
+@@ -122,6 +125,17 @@ Singleton {
+         }
+     }
+ 
++    Process {
++        id: getAllMonitors
++        command: ["hyprctl", "monitors", "all", "-j"]
++        stdout: StdioCollector {
++            id: allMonitorsCollector
++            onStreamFinished: {
++                root.allMonitors = JSON.parse(allMonitorsCollector.text);
++            }
++        }
++    }
++
+     Process {
+         id: getLayers
+         command: ["hyprctl", "layers", "-j"]

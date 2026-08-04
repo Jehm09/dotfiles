@@ -1,0 +1,20 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/wallpaperSelector/WallpaperSelectorContent.qml b/dots/.config/quickshell/ii/modules/ii/wallpaperSelector/WallpaperSelectorContent.qml
+index baea12bd..a2474d3b 100644
+--- a/dots/.config/quickshell/ii/modules/ii/wallpaperSelector/WallpaperSelectorContent.qml
++++ b/dots/.config/quickshell/ii/modules/ii/wallpaperSelector/WallpaperSelectorContent.qml
+@@ -198,14 +198,7 @@ MouseArea {
+                                 icon: "wallpaper",
+                                 name: "Wallpapers",
+                                 path: `${Directories.pictures}/Wallpapers`
+-                            },
+-                            ...(Config.options.policies.weeb === 1 ? [
+-                                    {
+-                                        icon: "favorite",
+-                                        name: "Homework",
+-                                        path: `${Directories.pictures}/homework`
+-                                    }
+-                                ] : []),]
++                            }]
+                         delegate: RippleButton {
+                             id: quickDirButton
+                             required property var modelData

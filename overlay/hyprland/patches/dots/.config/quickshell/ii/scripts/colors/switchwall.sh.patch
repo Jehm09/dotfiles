@@ -1,0 +1,187 @@
+diff --git a/dots/.config/quickshell/ii/scripts/colors/switchwall.sh b/dots/.config/quickshell/ii/scripts/colors/switchwall.sh
+index 7c52083a..e06891a0 100755
+--- a/dots/.config/quickshell/ii/scripts/colors/switchwall.sh
++++ b/dots/.config/quickshell/ii/scripts/colors/switchwall.sh
+@@ -8,7 +8,7 @@ CONFIG_DIR="$XDG_CONFIG_HOME/quickshell/$QUICKSHELL_CONFIG_NAME"
+ CACHE_DIR="$XDG_CACHE_HOME/quickshell"
+ STATE_DIR="$XDG_STATE_HOME/quickshell"
+ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+-SHELL_CONFIG_FILE="$XDG_CONFIG_HOME/illogical-impulse/config.json"
++SHELL_CONFIG_FILE="$XDG_CONFIG_HOME/settings/quickshell/config.json"
+ MATUGEN_DIR="$XDG_CONFIG_HOME/matugen"
+ terminalscheme="$SCRIPT_DIR/terminal/scheme-base.json"
+ 
+@@ -24,7 +24,7 @@ handle_kde_material_you_colors() {
+     # Map $type_flag to allowed scheme variants for kde-material-you-colors-wrapper.sh
+     local kde_scheme_variant=""
+     case "$type_flag" in
+-        scheme-content|scheme-expressive|scheme-fidelity|scheme-fruit-salad|scheme-monochrome|scheme-neutral|scheme-rainbow|scheme-tonal-spot)
++        scheme-content|scheme-expressive|scheme-fidelity|scheme-fruit-salad|scheme-monochrome|scheme-neutral|scheme-rainbow|scheme-tonal-spot|scheme-vibrant)
+             kde_scheme_variant="$type_flag"
+             ;;
+         *)
+@@ -50,12 +50,72 @@ pre_process() {
+     fi
+ }
+ 
++darken_kde_colors() {
++    local factor="${1:-0}"
++    local mode="${2:-dark}"
++    [[ "$mode" != "dark" ]] && return
++    [[ -z "$factor" || "$factor" == "0" || "$factor" == "null" ]] && return
++
++    local boost
++    boost=$(python3 -c "print(1.0 + float('$factor') * 0.5)")
++
++    # Darken BackgroundNormal/Alternate in .colors files AND directly in kdeglobals,
++    # then force Plasma to re-broadcast the color change to running apps.
++    python3 - "$HOME/.local/share/color-schemes" "$HOME/.config/kdeglobals" "$boost" <<'PYKDE'
++import sys, re, os
++
++def darken(hex_col, boost):
++    h = hex_col.lstrip('#')
++    if len(h) != 6: return hex_col
++    r, g, b = (max(0, int(int(h[i:i+2], 16) / boost)) for i in (0, 2, 4))
++    return f"#{r:02X}{g:02X}{b:02X}"
++
++def darken_ini(path, boost, strip_hash=False):
++    if not os.path.exists(path): return
++    lines = open(path).readlines()
++    result = []
++    for line in lines:
++        # Skip ColorSchemeHash so plasma-apply-colorscheme sees it as "new"
++        if strip_hash and line.startswith('ColorSchemeHash='):
++            continue
++        m = re.match(r'((?:Background|Inactive\.Background)(?:Normal|Alternate))=(#[0-9a-fA-F]{6})$', line.strip())
++        if m:
++            result.append(f"{m.group(1)}={darken(m.group(2), boost)}\n")
++        else:
++            result.append(line)
++    open(path, 'w').writelines(result)
++
++color_dir, kdeglobals, boost = sys.argv[1], sys.argv[2], float(sys.argv[3])
++
++for fname in os.listdir(color_dir):
++    if fname.startswith('MaterialYouDark') and fname.endswith('.colors'):
++        darken_ini(os.path.join(color_dir, fname), boost)
++
++# Patch kdeglobals and remove hash so plasma-apply-colorscheme forces a reload
++darken_ini(kdeglobals, boost, strip_hash=True)
++PYKDE
++
++    # Use kwriteconfig6 --notify to broadcast the color change to running KDE apps.
++    # plasma-apply-colorscheme skips the signal when it thinks the scheme is "already set",
++    # so we trigger the reload via kconfig's own D-Bus notification mechanism instead.
++    if command -v kwriteconfig6 &>/dev/null; then
++        # Re-write one key with --notify to make KDE apps (Dolphin, etc.) reload colors
++        local bg
++        bg=$(grep -A10 '^\[Colors:Window\]' "$HOME/.config/kdeglobals" | grep '^BackgroundNormal=' | head -1 | cut -d= -f2)
++        [[ -n "$bg" ]] && kwriteconfig6 --file kdeglobals \
++            --group "Colors:Window" --key "BackgroundNormal" "$bg" --notify &>/dev/null &
++    fi
++}
++
+ post_process() {
+     local screen_width="$1"
+     local screen_height="$2"
+     local wallpaper_path="$3"
+ 
+-    handle_kde_material_you_colors &
++    # Run KDE theming synchronously so we can darken its output afterwards
++    handle_kde_material_you_colors
++    darken_kde_colors "${dark_surfaces:-0}" "${mode_flag:-dark}"
++
+     "$SCRIPT_DIR/code/material-code-set-color.sh" &
+ }
+ 
+@@ -155,12 +215,6 @@ set_thumbnail_path() {
+     fi
+ }
+ 
+-categorize_wallpaper() {
+-    img_cat=$("$SCRIPT_DIR/../ai/gemini-categorize-wallpaper.sh" "$1")
+-    # notify-send "Wallpaper category" "$img_cat"
+-    echo "$img_cat" > "$STATE_DIR/user/generated/wallpaper/category.txt"
+-}
+-
+ switch() {
+     imgpath="$1"
+     mode_flag="$2"
+@@ -168,12 +222,6 @@ switch() {
+     color_flag="$4"
+     color="$5"
+ 
+-    # Start Gemini auto-categorization if enabled
+-    aiStylingEnabled=$(jq -r '.background.widgets.clock.cookie.aiStyling' "$SHELL_CONFIG_FILE")
+-    if [[ "$aiStylingEnabled" == "true" ]]; then
+-        categorize_wallpaper "$imgpath" &
+-    fi
+-
+     read scale screenx screeny screensizey < <(hyprctl monitors -j | jq '.[] | select(.focused) | .scale, .x, .y, .height' | xargs)
+     cursorposx=$(hyprctl cursorpos -j | jq '.x' 2>/dev/null) || cursorposx=960
+     cursorposx=$(bc <<< "scale=0; ($cursorposx - $screenx) * $scale / 1")
+@@ -301,6 +349,9 @@ switch() {
+         [[ "$harmony" != "null" && -n "$harmony" ]] && generate_colors_material_args+=(--harmony "$harmony")
+         [[ "$harmonize_threshold" != "null" && -n "$harmonize_threshold" ]] && generate_colors_material_args+=(--harmonize_threshold "$harmonize_threshold")
+         [[ "$term_fg_boost" != "null" && -n "$term_fg_boost" ]] && generate_colors_material_args+=(--term_fg_boost "$term_fg_boost")
++        # Dark surface depth: darkens terminals and GTK apps to match quickshell's dark mode
++        dark_surfaces=$(jq -r '.appearance.darkModeSurfaces // 0' "$SHELL_CONFIG_FILE" 2>/dev/null)
++        [[ "$dark_surfaces" != "null" && -n "$dark_surfaces" && "$dark_surfaces" != "0" ]] && generate_colors_material_args+=(--darken_factor "$dark_surfaces")
+     fi
+ 
+     matugen "${matugen_args[@]}"
+@@ -308,6 +359,45 @@ switch() {
+     python3 "$SCRIPT_DIR/generate_colors_material.py" "${generate_colors_material_args[@]}" \
+         > "$STATE_DIR"/user/generated/material_colors.scss
+     deactivate
++
++    # Darken GTK css surface colors if dark_surfaces > 0 and mode is dark
++    if [[ "${mode_flag:-}" == "dark" && -n "${dark_surfaces:-}" && "${dark_surfaces:-0}" != "0" ]]; then
++        python3 - "$dark_surfaces" "${XDG_CONFIG_HOME:-$HOME/.config}" <<'PYGTKDARKEN'
++import sys, re, os
++factor = float(sys.argv[1])
++boost = 1.0 + factor * 0.5
++config_dir = sys.argv[2]
++
++def darken_hex(h, boost):
++    h = h.lstrip('#')
++    return '#{:02X}{:02X}{:02X}'.format(*[max(0, int(int(h[i:i+2], 16) / boost)) for i in (0, 2, 4)])
++
++gtk_surface_vars = {'window_bg_color', 'headerbar_bg_color', 'popover_bg_color',
++                    'view_bg_color', 'card_bg_color', 'sidebar_bg_color'}
++
++for gtk_ver in ['gtk-3.0', 'gtk-4.0']:
++    css_path = os.path.join(config_dir, gtk_ver, 'gtk.css')
++    if not os.path.exists(css_path):
++        continue
++    with open(css_path) as f:
++        css = f.read()
++    in_dark = False
++    result = []
++    for line in css.splitlines():
++        if 'prefers-color-scheme: dark' in line:
++            in_dark = True
++        elif in_dark and '@media' in line:
++            in_dark = False
++        if in_dark:
++            m = re.match(r'(\s*@define-color\s+(\S+)\s+)(#[0-9a-fA-F]{6})(.*)', line)
++            if m and m.group(2) in gtk_surface_vars:
++                line = m.group(1) + darken_hex(m.group(3), boost) + m.group(4)
++        result.append(line)
++    with open(css_path, 'w') as f:
++        f.write('\n'.join(result))
++PYGTKDARKEN
++    fi
++
+     "$SCRIPT_DIR"/applycolor.sh
+ 
+     # Pass screen width, height, and wallpaper path to post_process
+@@ -395,7 +485,7 @@ main() {
+     fi
+ 
+     # Validate type_flag (allow 'auto' as well)
+-    allowed_types=(scheme-content scheme-expressive scheme-fidelity scheme-fruit-salad scheme-monochrome scheme-neutral scheme-rainbow scheme-tonal-spot auto)
++    allowed_types=(scheme-content scheme-expressive scheme-fidelity scheme-fruit-salad scheme-monochrome scheme-neutral scheme-rainbow scheme-tonal-spot scheme-vibrant auto)
+     valid_type=0
+     for t in "${allowed_types[@]}"; do
+         if [[ "$type_flag" == "$t" ]]; then

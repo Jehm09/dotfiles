@@ -1,0 +1,186 @@
+diff --git a/dots/.config/quickshell/ii/modules/common/Config.qml b/dots/.config/quickshell/ii/modules/common/Config.qml
+index 5fcd1bbd..e25b9332 100644
+--- a/dots/.config/quickshell/ii/modules/common/Config.qml
++++ b/dots/.config/quickshell/ii/modules/common/Config.qml
+@@ -78,34 +78,11 @@ Singleton {
+         JsonAdapter {
+             id: configOptionsJsonAdapter
+ 
+-            property string panelFamily: "ii" // "ii", "waffle"
+-
+-            property JsonObject policies: JsonObject {
+-                property int ai: 1 // 0: No | 1: Yes | 2: Local
+-                property int weeb: 1 // 0: No | 1: Open | 2: Closet
+-            }
+-
+-            property JsonObject ai: JsonObject {
+-                property string systemPrompt: "## Style\n- Use casual tone, don't be formal!\n- Always be brief and to the point, unless asked otherwise\n- Don't repeat the user's question\n- Be approachable: Avoid using overly complicated, domain-specific terms and provide analogies when asked to explain a concept\n\n## Context (ignore when irrelevant)\n- You are a helpful and inspiring sidebar assistant on a {DISTRO} Linux system\n- Desktop environment: {DE}\n- Current date & time: {DATETIME}\n- Focused app: {WINDOWCLASS}\n\n## Presentation\n- Use Markdown features in your response: \n  - **Bold** text to **highlight keywords** in your response\n  - **Split long information into small sections** with h2 headers and a relevant emoji at the start of it (for example `## 🐧 Linux`). Bullet points are preferred over long paragraphs, unless you're offering writing support or instructed otherwise by the user.\n- Asked to compare different options? You should firstly use a table to compare the main aspects, then elaborate or include relevant comments from online forums *after* the table. Make sure to provide a final recommendation for the user's use case!\n- Use LaTeX formatting for mathematical and scientific notations whenever appropriate. Enclose all LaTeX '$$' delimiters. NEVER generate LaTeX code in a latex block unless the user explicitly asks for it. DO NOT use LaTeX for regular documents (resumes, letters, essays, CVs, etc.).\n\nThanks!\n"
+-                property string tool: "functions" // search, functions, or none
+-                property list<var> extraModels: [
+-                    {
+-                        "api_format": "openai", // Most of the time you want "openai". Use "gemini" for Google's models
+-                        "description": "This is a custom model. Edit the config to add more! | Anyway, this is DeepSeek R1 Distill LLaMA 70B",
+-                        "endpoint": "https://openrouter.ai/api/v1/chat/completions",
+-                        "homepage": "https://openrouter.ai/deepseek/deepseek-r1-distill-llama-70b:free", // Not mandatory
+-                        "icon": "spark-symbolic", // Not mandatory
+-                        "key_get_link": "https://openrouter.ai/settings/keys", // Not mandatory
+-                        "key_id": "openrouter",
+-                        "model": "deepseek/deepseek-r1-distill-llama-70b:free",
+-                        "name": "Custom: DS R1 Dstl. LLaMA 70B",
+-                        "requires_key": true
+-                    }
+-                ]
+-            }
++            property string panelFamily: "ii"
+ 
+             property JsonObject appearance: JsonObject {
+                 property bool extraBackgroundTint: true
++                property real darkModeSurfaces: 5 // Darken surfaces in dark mode. 0 = matugen default, 1 = noticeably darker, 2 = very dark, 3 = OLED-like
+                 property int fakeScreenRounding: 2 // 0: None | 1: Always | 2: When not fullscreen
+                 property JsonObject fonts: JsonObject {
+                     property string main: "Google Sans Flex"
+@@ -131,10 +108,11 @@ Singleton {
+                         property real harmonizeThreshold: 100
+                         property real termFgBoost: 0.35
+                         property bool forceDarkMode: false
++                        property real opacity: 1.0
+                     }
+                 }
+                 property JsonObject palette: JsonObject {
+-                    property string type: "auto" // Allowed: auto, scheme-content, scheme-expressive, scheme-fidelity, scheme-fruit-salad, scheme-monochrome, scheme-neutral, scheme-rainbow, scheme-tonal-spot
++                    property string type: "auto" // Allowed: auto, scheme-content, scheme-expressive, scheme-fidelity, scheme-fruit-salad, scheme-monochrome, scheme-neutral, scheme-rainbow, scheme-tonal-spot, scheme-vibrant
+                     property string accentColor: ""
+                 }
+             }
+@@ -155,7 +133,7 @@ Singleton {
+                 property string network: "kcmshell6 kcm_networkmanagement"
+                 property string manageUser: "kcmshell6 kcm_users"
+                 property string networkEthernet: "kcmshell6 kcm_networkmanagement"
+-                property string taskManager: "plasma-systemmonitor --page-name Processes"
++                property string taskManager: "kitty -1 fish -c btop"
+                 property string terminal: "kitty -1" // This is only for shell actions
+                 property string update: "kitty -1 --hold=yes fish -i -c 'pkexec pacman -Syu'"
+                 property string volumeMixer: `~/.config/hypr/hyprland/scripts/launch_first_available.sh "pavucontrol-qt" "pavucontrol"`
+@@ -237,16 +215,26 @@ Singleton {
+                 property int cornerStyle: 0 // 0: Hug | 1: Float | 2: Plain rectangle
+                 property bool floatStyleShadow: true // Show shadow behind bar when cornerStyle == 1 (Float)
+                 property bool borderless: false // true for no grouping of items
+-                property string topLeftIcon: "spark" // Options: "distro" or any icon name in ~/.config/quickshell/ii/assets/icons
++                property string topLeftIcon: "distro" // "distro" shows the OS logo (Arch). Or any icon name in ~/.config/quickshell/assets/icons
+                 property bool showBackground: true
+                 property bool verbose: true
+                 property bool vertical: false
+                 property JsonObject resources: JsonObject {
++                    // ── Bar indicators ───────────────────────────────────
+                     property bool alwaysShowSwap: true
+                     property bool alwaysShowCpu: true
++                    property bool alwaysShowGpu: false     // show GPU % circle in bar
++                    property bool alwaysShowNetwork: false // show ↓/↑ speeds in bar
++                    // ── Warning thresholds (%) ───────────────────────────
+                     property int memoryWarningThreshold: 95
+                     property int swapWarningThreshold: 85
+                     property int cpuWarningThreshold: 90
++                    property int gpuWarningThreshold: 90
++                    // ── Popup details ────────────────────────────────────
++                    property bool popupCpuTemp: true    // show CPU temperature
++                    property bool popupGpu: true        // show GPU load + temp
++                    property bool popupStorage: true    // show disk usage
++                    property bool popupNetwork: true    // show network speeds
+                 }
+                 property list<string> screenList: [] // List of names, like "eDP-1", find out with 'hyprctl monitors' command
+                 property JsonObject utilButtons: JsonObject {
+@@ -301,7 +289,7 @@ Singleton {
+                 // 0: 󰖳  | 1: 󰌽 | 2: 󰘳 | 3:  | 4: 󰨡
+                 // 5:  | 6:  | 7: 󰣇 | 8:  | 9: 
+                 // 10:  | 11:  | 12:  | 13:  | 14: 󱄛
+-                property string superKey: ""
++                property string superKey: "󰣇" // Arch Linux logo (nf-md-arch). Set "" to use the distro SVG fallback.
+                 property bool useMacSymbol: false
+                 property bool splitButtons: false
+                 property bool useMouseSymbol: false
+@@ -334,6 +322,17 @@ Singleton {
+                 property list<string> ignoredAppRegexes: []
+             }
+ 
++            // Per-monitor display config. Stored here, applied by external tooling.
++            // Each monitors entry: { name, enabled, width, height, refreshRate, x, y, scale }
++            property JsonObject display: JsonObject {
++                property list<string> order: []
++                property list<var> monitors: []
++                property JsonObject workspaces: JsonObject {
++                    property int perMonitor: 10
++                    property bool cycle: false
++                }
++            }
++
+             property JsonObject interactions: JsonObject {
+                 property JsonObject scrolling: JsonObject {
+                     property bool fasterTouchpadScroll: false // Enable faster scrolling with touchpad
+@@ -347,7 +346,7 @@ Singleton {
+             }
+ 
+             property JsonObject language: JsonObject {
+-                property string ui: "auto" // UI language. "auto" for system locale, or specific language code like "zh_CN", "en_US"
++                property string ui: "en" // UI language: loads i18n/<code>.json (e.g. "en"). "auto" uses the system locale.
+                 property JsonObject translator: JsonObject {
+                     property string engine: "auto" // Run `trans -list-engines` for available engines. auto should use google
+                     property string targetLanguage: "auto" // Run `trans -list-all` for available languages
+@@ -459,6 +458,8 @@ Singleton {
+             property JsonObject resources: JsonObject {
+                 property int updateInterval: 3000
+                 property int historyLength: 60
++                // "auto" uses all non-loopback interfaces summed; or specify e.g. "eth0", "wlan0"
++                property string networkInterface: "auto"
+             }
+ 
+             property JsonObject tray: JsonObject {
+@@ -497,21 +498,6 @@ Singleton {
+ 
+             property JsonObject sidebar: JsonObject {
+                 property bool keepRightSidebarLoaded: true
+-                property JsonObject translator: JsonObject {
+-                    property bool enable: false
+-                    property int delay: 300 // Delay before sending request. Reduces (potential) rate limits and lag.
+-                }
+-                property JsonObject ai: JsonObject {
+-                    property bool textFadeIn: false
+-                }
+-                property JsonObject booru: JsonObject {
+-                    property bool allowNsfw: false
+-                    property string defaultProvider: "yandere"
+-                    property int limit: 20
+-                    property JsonObject zerochan: JsonObject {
+-                        property string username: "[unset]"
+-                    }
+-                }
+                 property JsonObject cornerOpen: JsonObject {
+                     property bool enable: true
+                     property bool bottom: false
+@@ -607,27 +593,6 @@ Singleton {
+                     property list<string> linkKeywords: ["hentai", "porn", "sukebei", "hitomi.la", "rule34", "gelbooru", "fanbox", "dlsite"]
+                 }
+             }
+-
+-            property JsonObject waffles: JsonObject {
+-                // Some spots are kinda janky/awkward. Setting the following to
+-                // false will make (some) stuff also be like that for accuracy. 
+-                // Example: the right-click menu of the Start button
+-                property JsonObject tweaks: JsonObject {
+-                    property bool switchHandlePositionFix: true
+-                    property bool smootherMenuAnimations: true
+-                    property bool smootherSearchBar: true
+-                }
+-                property JsonObject bar: JsonObject {
+-                    property bool bottom: true
+-                    property bool leftAlignApps: false
+-                }
+-                property JsonObject actionCenter: JsonObject {
+-                    property list<string> toggles: [ "network", "bluetooth", "easyEffects", "powerProfile", "idleInhibitor", "nightLight", "darkMode", "antiFlashbang", "cloudflareWarp", "mic", "musicRecognition", "notifications", "onScreenKeyboard", "gameMode", "screenSnip", "colorPicker" ]
+-                }
+-                property JsonObject calendar: JsonObject {
+-                    property bool force2CharDayOfWeek: true
+-                }
+-            }
+         }
+     }
+ }

@@ -1,2 +1,6 @@
 # Generated at runtime — do not commit
-dots/.config/settings/colors.json
+arch-install.log
+
+# The upstream clone lives in $XDG_DATA_HOME/dotfiles/upstream, outside this
+# repo. Ignored here only in case someone points DOTFILES_UPSTREAM_DIR inside it.
+/upstream/

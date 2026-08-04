@@ -1,0 +1,114 @@
+diff --git a/dots/.config/quickshell/ii/modules/settings/QuickConfig.qml b/dots/.config/quickshell/ii/modules/settings/QuickConfig.qml
+index 75d956a8..fb7e3560 100644
+--- a/dots/.config/quickshell/ii/modules/settings/QuickConfig.qml
++++ b/dots/.config/quickshell/ii/modules/settings/QuickConfig.qml
+@@ -11,18 +11,6 @@ import qs.modules.common.functions
+ ContentPage {
+     forceWidth: true
+ 
+-    Process {
+-        id: randomWallProc
+-        property string status: ""
+-        property string scriptPath: `${Directories.scriptPath}/colors/random/random_konachan_wall.sh`
+-        command: ["bash", "-c", FileUtils.trimFileProtocol(randomWallProc.scriptPath)]
+-        stdout: SplitParser {
+-            onRead: data => {
+-                randomWallProc.status = data.trim();
+-            }
+-        }
+-    }
+-
+     component SmallLightDarkPreferenceButton: RippleButton {
+         id: smallLightDarkPreferenceButton
+         required property bool dark
+@@ -86,36 +74,6 @@ ContentPage {
+             }
+ 
+             ColumnLayout {
+-                RippleButtonWithIcon {
+-                    enabled: !randomWallProc.running
+-                    visible: Config.options.policies.weeb === 1
+-                    Layout.fillWidth: true
+-                    buttonRadius: Appearance.rounding.small
+-                    materialIcon: "ifl"
+-                    mainText: randomWallProc.running ? Translation.tr("Be patient...") : Translation.tr("Random: Konachan")
+-                    onClicked: {
+-                        randomWallProc.scriptPath = `${Directories.scriptPath}/colors/random/random_konachan_wall.sh`;
+-                        randomWallProc.running = true;
+-                    }
+-                    StyledToolTip {
+-                        text: Translation.tr("Random SFW Anime wallpaper from Konachan\nImage is saved to ~/Pictures/Wallpapers")
+-                    }
+-                }
+-                RippleButtonWithIcon {
+-                    enabled: !randomWallProc.running
+-                    visible: Config.options.policies.weeb === 1
+-                    Layout.fillWidth: true
+-                    buttonRadius: Appearance.rounding.small
+-                    materialIcon: "ifl"
+-                    mainText: randomWallProc.running ? Translation.tr("Be patient...") : Translation.tr("Random: osu! seasonal")
+-                    onClicked: {
+-                        randomWallProc.scriptPath = `${Directories.scriptPath}/colors/random/random_osu_wall.sh`;
+-                        randomWallProc.running = true;
+-                    }
+-                    StyledToolTip {
+-                        text: Translation.tr("Random osu! seasonal background\nImage is saved to ~/Pictures/Wallpapers")
+-                    }
+-                }
+                 RippleButtonWithIcon {
+                     Layout.fillWidth: true
+                     materialIcon: "wallpaper"
+@@ -212,6 +170,10 @@ ContentPage {
+                 {
+                     "value": "scheme-tonal-spot",
+                     "displayName": Translation.tr("Tonal Spot")
++                },
++                {
++                    "value": "scheme-vibrant",
++                    "displayName": Translation.tr("Vibrant")
+                 }
+             ]
+         }
+@@ -224,6 +186,33 @@ ContentPage {
+                 Config.options.appearance.transparency.enable = checked;
+             }
+         }
++
++        ConfigSlider {
++            id: darkSurfacesSlider
++            buttonIcon: "brightness_empty"
++            text: Translation.tr("Dark surfaces")
++            visible: Appearance.m3colors.darkmode
++            value: Config.options.appearance.darkModeSurfaces
++            from: 0
++            to: 5
++            stepSize: 0.5
++            usePercentTooltip: false
++            stopIndicatorValues: [0, 2.5, 5]
++            onValueChanged: {
++                Config.options.appearance.darkModeSurfaces = value;
++                MaterialThemeLoader.reapplyTheme();  // immediate UI update
++                darkSurfacesRegen.restart();          // regenerate terminals + GTK (debounced)
++            }
++        }
++        Timer {
++            id: darkSurfacesRegen
++            interval: 800
++            repeat: false
++            onTriggered: {
++                Quickshell.execDetached(["bash", "-c",
++                    `${Directories.wallpaperSwitchScriptPath} --noswitch`]);
++            }
++        }
+     }
+ 
+     ContentSection {
+@@ -340,7 +329,7 @@ ContentPage {
+             mainText: justCopied ? Translation.tr("Path copied") : Translation.tr("Copy path")
+             onClicked: {
+                 copyPathButton.justCopied = true
+-                Quickshell.clipboardText = FileUtils.trimFileProtocol(`${Directories.config}/illogical-impulse/config.json`);
++                Quickshell.clipboardText = Directories.shellConfigPath;
+                 revertTextTimer.restart();
+             }
+             colBackground: ColorUtils.transparentize(Appearance.colors.colPrimaryContainer)

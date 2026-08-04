@@ -1,0 +1,27 @@
+diff --git a/dots/.config/hypr/hyprland/scripts/launch_first_available.sh b/dots/.config/hypr/hyprland/scripts/launch_first_available.sh
+index 31dd23a5..127267f0 100755
+--- a/dots/.config/hypr/hyprland/scripts/launch_first_available.sh
++++ b/dots/.config/hypr/hyprland/scripts/launch_first_available.sh
+@@ -1,7 +1,19 @@
+ #!/usr/bin/env bash
++# Lanza el primer comando cuyo binario esté disponible.
++# Cada arg se ejecuta vía `bash -c` para que respete variables ($qsConfig, ~) y
++# operadores ($'&& || ;'). Caso especial: "command -v X && Y" verifica X
++# (en vez del literal "command") y ejecuta Y.
+ for cmd in "$@"; do
+     [[ -z "$cmd" ]] && continue
+-    eval "command -v ${cmd%% *}" >/dev/null 2>&1 || continue
+-    eval "$cmd" &
+-    exit
++    if [[ "$cmd" == "command -v "*" && "* ]]; then
++        after="${cmd#command -v }"
++        bin="${after%% *}"
++        rest="${after#* && }"
++    else
++        bin="${cmd%% *}"
++        rest="$cmd"
++    fi
++    command -v "$bin" >/dev/null 2>&1 || continue
++    exec bash -c "$rest"
+ done
++exit 1

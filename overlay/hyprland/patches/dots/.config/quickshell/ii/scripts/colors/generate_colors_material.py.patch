@@ -1,0 +1,38 @@
+diff --git a/dots/.config/quickshell/ii/scripts/colors/generate_colors_material.py b/dots/.config/quickshell/ii/scripts/colors/generate_colors_material.py
+index db6b1664..b040c378 100755
+--- a/dots/.config/quickshell/ii/scripts/colors/generate_colors_material.py
++++ b/dots/.config/quickshell/ii/scripts/colors/generate_colors_material.py
+@@ -12,6 +12,7 @@ from materialyoucolor.utils.math_utils import (sanitize_degrees_double, differen
+ 
+ parser = argparse.ArgumentParser(description='Color generation script')
+ parser.add_argument('--path', type=str, default=None, help='generate colorscheme from image')
++parser.add_argument('--darken_factor', type=float, default=0.0, help='Darken surface colors in dark mode (0=off, 5=OLED black). Uses Qt.darker-equivalent: factor = 1 + value * 0.3')
+ parser.add_argument('--size', type=int , default=128 , help='bitmap image size')
+ parser.add_argument('--color', type=str, default=None, help='generate colorscheme from color')
+ parser.add_argument('--mode', type=str, choices=['dark', 'light'], default='dark', help='dark or light mode')
+@@ -151,6 +152,25 @@ if args.termscheme is not None:
+             harmonized = boost_chroma_tone(harmonized, 1, 1 + (args.term_fg_boost * (1 if darkmode else -1)))
+         term_colors[color] = argb_to_hex(harmonized)
+ 
++# Darken surface colors in dark mode (matches quickshell's Appearance.darkModeSurfaces logic)
++if darkmode and args.darken_factor > 0:
++    dark_boost = 1.0 + args.darken_factor * 0.5
++    _surfaces = [
++        'background', 'surface', 'surfaceDim', 'surfaceBright',
++        'surfaceContainerLowest', 'surfaceContainerLow',
++        'surfaceContainer', 'surfaceContainerHigh', 'surfaceContainerHighest',
++    ]
++    for _key in _surfaces:
++        if _key in material_colors:
++            _h = material_colors[_key].lstrip('#')
++            _r, _g, _b = (max(0, int(int(_h[i:i+2], 16) / dark_boost)) for i in (0, 2, 4))
++            material_colors[_key] = f"#{_r:02X}{_g:02X}{_b:02X}"
++    # Also darken terminal background (term0 in dark mode = darkest bg)
++    if 'term0' in term_colors:
++        _h = term_colors['term0'].lstrip('#')
++        _r, _g, _b = (max(0, int(int(_h[i:i+2], 16) / dark_boost)) for i in (0, 2, 4))
++        term_colors['term0'] = f"#{_r:02X}{_g:02X}{_b:02X}"
++
+ if args.debug == False:
+     print(f"$darkmode: {darkmode};")
+     print(f"$transparent: {transparent};")

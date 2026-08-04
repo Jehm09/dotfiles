@@ -28,9 +28,19 @@ Subcommands:
                   Runs: inject packages → archinstall
 
     post          Post-install setup after first boot  (run as your user)
-                  Runs: multilib → AUR helper → AUR packages → greeter → hooks → dotfiles → fish
+                  Runs: multilib → AUR helper → desktop → apps → greeter → hooks
+                        → dotfiles → fish
 
-    dotfiles      Link dotfiles to ~/.config (or use --dry-run / --unlink)
+    dotfiles      Link dotfiles to ~/.config — pick the desktop:
+                      hyprland   dots/common + dots/hyprland
+                      kde        dots/common  (+ 'setup kde apply' for Plasma)
+
+    kde           KDE Plasma profile — managed by copy, not symlink
+                  apply | save | diff  (see 'setup kde --help')
+
+    upstream      Hyprland/Quickshell code from end-4/dots-hyprland, kept out of
+                  this repo and reconstructed from overlay/hyprland/
+                  sync | update | export | deps | status  ('setup upstream --help')
 
 Aliases:
     dots          Alias for 'dotfiles'
@@ -39,9 +49,17 @@ Examples:
     $0 install                    Full automated Arch install from ISO
     $0 post                       Post-install: AUR, greeter, hooks, dotfiles, shell
     $0 post --all                 Run everything without prompting
-    $0 dotfiles                   Link dotfiles to ~/.config
-    $0 dotfiles --dry-run         Preview what would happen
-    $0 dotfiles --unlink          Remove managed symlinks
+    $0 post --kde                 Post-install choosing Plasma as the desktop
+    $0 dotfiles hyprland          Link common + hyprland to ~/.config
+    $0 dotfiles kde               Link common, then run '$0 kde apply'
+    $0 dotfiles kde --dry-run     Preview what would happen
+    $0 dotfiles hyprland --unlink Remove managed symlinks
+    $0 kde apply                  Write the Plasma config from the repo to ~
+    $0 kde save                   Pull your current Plasma config into the repo
+    $0 kde diff                   Show what differs, change nothing
+    $0 upstream status            Show the pinned upstream commit and any drift
+    $0 upstream update            Merge new upstream changes into your overlay
+    $0 upstream export            Save the merge result back into overlay/
 
 EOF
 }
@@ -55,7 +73,8 @@ _show_menu() {
     echo ""
     echo "    1)  install     Instalación desde Arch ISO  (requiere root)"
     echo "    2)  post        Post-instalación tras el primer arranque"
-    echo "    3)  dotfiles    Enlazar ~/.config"
+    echo "    3)  dotfiles    Enlazar ~/.config  (pregunta hyprland o kde)"
+    echo "    4)  kde         Aplicar el perfil de KDE Plasma a ~/.config"
     echo ""
     echo "    0)  Salir"
     echo ""
@@ -64,9 +83,27 @@ _show_menu() {
     case "$_opt" in
         1) exec "$REPO_ROOT/setup" install  ;;
         2) exec "$REPO_ROOT/setup" post     ;;
-        3) exec "$REPO_ROOT/setup" dotfiles ;;
+        3) _ask_desktop; exec "$REPO_ROOT/setup" dotfiles "$_desktop" ;;
+        4) exec "$REPO_ROOT/setup" kde apply ;;
         0|"") exit 0                        ;;
         *) error "Opción inválida: $_opt"; exit 1 ;;
+    esac
+}
+
+# There is no default desktop: the two profiles are mutually exclusive, so the
+# choice is always explicit.
+_ask_desktop() {
+    echo "    ¿Qué escritorio?"
+    echo ""
+    echo "      1) hyprland   dots/common + dots/hyprland"
+    echo "      2) kde        dots/common  (Plasma se aplica con 'setup kde apply')"
+    echo ""
+    read -rp "  Escritorio: " _d
+    echo ""
+    case "$_d" in
+        1|hyprland) _desktop="hyprland" ;;
+        2|kde)      _desktop="kde"      ;;
+        *) error "Opción inválida: $_d"; exit 1 ;;
     esac
 }
 
@@ -92,6 +129,18 @@ case "${1:-}" in
     dotfiles|dots)
         shift
         bash "$REPO_ROOT/cmd/lib/symlink.sh" "$@"
+        ;;
+
+    kde)
+        shift
+        prevent_root
+        bash "$REPO_ROOT/cmd/lib/kde.sh" "$@"
+        ;;
+
+    upstream)
+        shift
+        prevent_root
+        bash "$REPO_ROOT/cmd/lib/upstream.sh" "$@"
         ;;
 
     -h|--help|help)

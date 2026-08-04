@@ -1,0 +1,53 @@
+diff --git a/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml b/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml
+index aec8dc98..bf939808 100644
+--- a/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml
++++ b/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml
+@@ -7,23 +7,6 @@ import qs.modules.common.widgets
+ ContentPage {
+     forceWidth: true
+ 
+-    ContentSection {
+-        icon: "neurology"
+-        title: Translation.tr("AI")
+-
+-        MaterialTextArea {
+-            Layout.fillWidth: true
+-            placeholderText: Translation.tr("System prompt")
+-            text: Config.options.ai.systemPrompt
+-            wrapMode: TextEdit.Wrap
+-            onTextChanged: {
+-                Qt.callLater(() => {
+-                    Config.options.ai.systemPrompt = text;
+-                });
+-            }
+-        }
+-    }
+-
+     ContentSection {
+         icon: "music_cast"
+         title: Translation.tr("Music Recognition")
+@@ -67,24 +50,6 @@ ContentPage {
+         }
+     }
+ 
+-    ContentSection {
+-        icon: "memory"
+-        title: Translation.tr("Resources")
+-
+-        ConfigSpinBox {
+-            icon: "av_timer"
+-            text: Translation.tr("Polling interval (ms)")
+-            value: Config.options.resources.updateInterval
+-            from: 100
+-            to: 10000
+-            stepSize: 100
+-            onValueChanged: {
+-                Config.options.resources.updateInterval = value;
+-            }
+-        }
+-        
+-    }
+-
+     ContentSection {
+         icon: "file_open"
+         title: Translation.tr("Save paths")

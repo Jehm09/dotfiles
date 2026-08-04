@@ -1,0 +1,31 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/overview/SearchWidget.qml b/dots/.config/quickshell/ii/modules/ii/overview/SearchWidget.qml
+index c99b930c..dd403a01 100644
+--- a/dots/.config/quickshell/ii/modules/ii/overview/SearchWidget.qml
++++ b/dots/.config/quickshell/ii/modules/ii/overview/SearchWidget.qml
+@@ -158,6 +158,26 @@ Item { // Wrapper
+                 color: Appearance.colors.colOutlineVariant
+             }
+ 
++            RowLayout {
++                visible: root.showResults && root.searchingText.startsWith(Config.options.search.prefix.clipboard)
++                Layout.fillWidth: true
++                Layout.rightMargin: 8
++                Layout.topMargin: 4
++                Layout.bottomMargin: 2
++
++                Item { Layout.fillWidth: true }
++
++                RippleButtonWithIcon {
++                    materialIcon: "delete_sweep"
++                    mainText: Translation.tr("Clear all history")
++                    buttonRadius: Appearance.rounding.full
++                    colBackground: ColorUtils.transparentize(Appearance.colors.colErrorContainer, 0.5)
++                    colBackgroundHover: Appearance.colors.colErrorContainer
++                    colRipple: ColorUtils.transparentize(Appearance.colors.colError, 0.4)
++                    onClicked: Cliphist.wipe()
++                }
++            }
++
+             ListView { // App results
+                 id: appResults
+                 visible: root.showResults

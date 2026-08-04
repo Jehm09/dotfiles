@@ -1,0 +1,92 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionScreen.qml b/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionScreen.qml
+index 78b93c4d..c542b495 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionScreen.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionScreen.qml
+@@ -45,7 +45,7 @@ Scope {
+             WlrLayershell.namespace: "quickshell:session"
+             WlrLayershell.layer: WlrLayer.Overlay
+             WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
+-            color: ColorUtils.transparentize(Appearance.m3colors.m3background, Appearance.m3colors.darkmode ? 0.05 : 0.12)
++            color: ColorUtils.transparentize(Appearance.colors.colLayer0, 0.22)
+ 
+             anchors {
+                 top: true
+@@ -118,7 +118,7 @@ Scope {
+                                 sessionRoot.subtitle = buttonText;
+                         }
+                         KeyNavigation.right: sessionSleep
+-                        KeyNavigation.down: sessionHibernate
++                        KeyNavigation.down: sessionShutdown
+                     }
+                     SessionActionButton {
+                         id: sessionSleep
+@@ -134,7 +134,7 @@ Scope {
+                         }
+                         KeyNavigation.left: sessionLock
+                         KeyNavigation.right: sessionLogout
+-                        KeyNavigation.down: sessionShutdown
++                        KeyNavigation.down: sessionReboot
+                     }
+                     SessionActionButton {
+                         id: sessionLogout
+@@ -150,7 +150,7 @@ Scope {
+                         }
+                         KeyNavigation.left: sessionSleep
+                         KeyNavigation.right: sessionTaskManager
+-                        KeyNavigation.down: sessionReboot
++                        KeyNavigation.down: sessionFirmwareReboot
+                     }
+                     SessionActionButton {
+                         id: sessionTaskManager
+@@ -168,21 +168,6 @@ Scope {
+                         KeyNavigation.down: sessionFirmwareReboot
+                     }
+ 
+-                    SessionActionButton {
+-                        id: sessionHibernate
+-                        buttonIcon: "downloading"
+-                        buttonText: Translation.tr("Hibernate")
+-                        onClicked: {
+-                            Session.hibernate();
+-                            sessionRoot.hide();
+-                        }
+-                        onFocusChanged: {
+-                            if (focus)
+-                                sessionRoot.subtitle = buttonText;
+-                        }
+-                        KeyNavigation.up: sessionLock
+-                        KeyNavigation.right: sessionShutdown
+-                    }
+                     SessionActionButton {
+                         id: sessionShutdown
+                         buttonIcon: "power_settings_new"
+@@ -195,9 +180,8 @@ Scope {
+                             if (focus)
+                                 sessionRoot.subtitle = buttonText;
+                         }
+-                        KeyNavigation.left: sessionHibernate
+                         KeyNavigation.right: sessionReboot
+-                        KeyNavigation.up: sessionSleep
++                        KeyNavigation.up: sessionLock
+                     }
+                     SessionActionButton {
+                         id: sessionReboot
+@@ -213,7 +197,7 @@ Scope {
+                         }
+                         KeyNavigation.left: sessionShutdown
+                         KeyNavigation.right: sessionFirmwareReboot
+-                        KeyNavigation.up: sessionLogout
++                        KeyNavigation.up: sessionSleep
+                     }
+                     SessionActionButton {
+                         id: sessionFirmwareReboot
+@@ -227,8 +211,8 @@ Scope {
+                             if (focus)
+                                 sessionRoot.subtitle = buttonText;
+                         }
+-                        KeyNavigation.up: sessionTaskManager
+                         KeyNavigation.left: sessionReboot
++                        KeyNavigation.up: sessionLogout
+                     }
+                 }
+ 

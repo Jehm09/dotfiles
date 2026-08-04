@@ -1,0 +1,91 @@
+diff --git a/dots/.config/quickshell/ii/services/Translation.qml b/dots/.config/quickshell/ii/services/Translation.qml
+index fe8f8d75..dc94ecc9 100644
+--- a/dots/.config/quickshell/ii/services/Translation.qml
++++ b/dots/.config/quickshell/ii/services/Translation.qml
+@@ -9,21 +9,16 @@ Singleton {
+     id: root
+ 
+     property var translations: ({})
+-    property var generatedTranslations: ({})
+-    property var availableLanguages: ["en_US"]
+-    property var availableGeneratedLanguages: []
+-    property var allAvailableLanguages: {
+-        const combined = new Set([...root.availableLanguages, ...root.availableGeneratedLanguages]);
+-        return Array.from(combined).sort();
+-    }
++    property var availableLanguages: ["en"]
++    // Kept for the settings/welcome language pickers
++    property var allAvailableLanguages: [...root.availableLanguages].sort()
+     property bool isScanning: scanLanguagesProcess.running
+     property bool isLoading: false
+     property string translationKeepSuffix: "/*keep*/"
+-    property string translationsDir: Quickshell.shellPath("translations")
+-    property string generatedTranslationsDir: Directories.shellConfig + "/translations"
++    property string translationsDir: Quickshell.shellPath("i18n")
+ 
+     property string languageCode: {
+-        var configLang = Config?.options.language.ui ?? "auto";
++        var configLang = Config?.options.language.ui ?? "en";
+ 
+         if (configLang !== "auto")
+             return configLang;
+@@ -39,20 +34,10 @@ Singleton {
+         }
+     }
+ 
+-    TranslationScanner {
+-        id: scanGeneratedLanguagesProcess
+-        translationsDir: root.generatedTranslationsDir
+-        onLanguagesScanned: (languages) => {
+-            root.availableGeneratedLanguages = [...languages];
+-        }
+-    }
+-
+     onLanguageCodeChanged: {
+         print("[Translation] Language changed to", root.languageCode);
+         translationFileView.languageCode = root.languageCode;
+-        generatedTranslationFileView.languageCode = root.languageCode;
+         translationFileView.reread();
+-        generatedTranslationFileView.reread();
+     }
+ 
+     TranslationReader {
+@@ -65,26 +50,15 @@ Singleton {
+         }
+     }
+ 
+-    TranslationReader {
+-        id: generatedTranslationFileView
+-        translationsDir: root.generatedTranslationsDir
+-        languageCode: root.languageCode
+-        onContentLoaded: (data) => {
+-            root.generatedTranslations = data;
+-            root.isLoading = false;
+-        }
+-    }
+-
+     function tr(text) {
+         // Special cases
+         if (!text) return "";
+         var key = text.toString();
+-        if (root.isLoading || (!root?.translations?.hasOwnProperty(key) && !root?.generatedTranslations?.hasOwnProperty(key)))
++        if (root.isLoading || !root?.translations?.hasOwnProperty(key))
+             return key;
+-        
++
+         // Normal cases
+-        var translation = root.translations[key] || root.generatedTranslations[key] || key;
+-        // print(key, "-> [", root.translations[key], root.generatedTranslations[key], key, "] ->", translation);
++        var translation = root.translations[key] || key;
+         if (translation.endsWith(root.translationKeepSuffix)) {
+             translation = translation.substring(0, translation.length - root.translationKeepSuffix.length).trim();
+         }
+@@ -110,7 +84,7 @@ Singleton {
+ 
+         onExited: (exitCode, exitStatus) => {
+             if (exitCode !== 0) {
+-                translationScanner.languagesScanned(["en_US"]);
++                translationScanner.languagesScanned(["en"]);
+             }
+         }
+     }

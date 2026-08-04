@@ -1,0 +1,12 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml b/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml
+index b9689be8..c2ceb486 100644
+--- a/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml
++++ b/dots/.config/quickshell/ii/modules/ii/verticalBar/VerticalBarContent.qml
+@@ -70,7 +70,6 @@ Item { // Bar content region
+             Bar.LeftSidebarButton { // Left sidebar button
+                 Layout.alignment: Qt.AlignHCenter
+                 Layout.topMargin: (Appearance.sizes.baseVerticalBarWidth - implicitWidth) / 2 + Appearance.sizes.hyprlandGapsOut
+-                colBackground: barTopSectionMouseArea.hovered ? Appearance.colors.colLayer1Hover : ColorUtils.transparentize(Appearance.colors.colLayer1Hover, 1)
+             }
+ 
+             Item {

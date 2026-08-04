@@ -1,0 +1,25 @@
+diff --git a/dots/.config/hypr/hypridle.conf b/dots/.config/hypr/hypridle.conf
+index 36f8b62b..c03f0cbf 100644
+--- a/dots/.config/hypr/hypridle.conf
++++ b/dots/.config/hypr/hypridle.conf
+@@ -10,7 +10,7 @@ general {
+ }
+ 
+ listener {
+-    timeout = 300 # 5mins
++    timeout = 900 # 15mins
+     on-timeout = loginctl lock-session
+ }
+ 
+@@ -20,7 +20,7 @@ listener {
+     on-resume = hyprctl dispatch 'hl.dsp.dpms({ action = "enable" })'
+ }
+ 
+-listener {
+-    timeout = 900 # 15mins
+-    on-timeout = $suspend_cmd
+-}
++# listener {
++#     timeout = 900 # 15mins
++#     on-timeout = $suspend_cmd
++# }

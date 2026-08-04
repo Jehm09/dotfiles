@@ -1,0 +1,290 @@
+diff --git a/dots/.config/hypr/hyprland/keybinds.lua b/dots/.config/hypr/hyprland/keybinds.lua
+index 6078f0b4..48272f90 100644
+--- a/dots/.config/hypr/hyprland/keybinds.lua
++++ b/dots/.config/hypr/hyprland/keybinds.lua
+@@ -23,10 +23,6 @@ hl.bind("SUPER_R", hl.dsp.global("quickshell:workspaceNumber"),
+ hl.bind("SUPER + Tab", hl.dsp.global("quickshell:overviewWorkspacesToggle"), { description = "Shell: Toggle overview" })
+ hl.bind("SUPER + V", hl.dsp.global("quickshell:overviewClipboardToggle"))
+ hl.bind("SUPER + Period", hl.dsp.global("quickshell:overviewEmojiToggle"))
+-hl.bind("SUPER + A", hl.dsp.global("quickshell:sidebarLeftToggle"), { description = "Shell: Toggle left sidebar" })
+-hl.bind("SUPER + ALT + A", hl.dsp.global("quickshell:sidebarLeftToggleDetach"))
+-hl.bind("SUPER + B", hl.dsp.global("quickshell:sidebarLeftToggle"))
+-hl.bind("SUPER + O", hl.dsp.global("quickshell:sidebarLeftToggle"))
+ hl.bind("SUPER + N", hl.dsp.global("quickshell:sidebarRightToggle"), { description = "Shell: Toggle right sidebar" })
+ hl.bind("SUPER + Slash", hl.dsp.global("quickshell:cheatsheetToggle"), { description = "Shell: Toggle cheatsheet" })
+ hl.bind("SUPER + K", hl.dsp.global("quickshell:oskToggle"), { description = "Shell: Toggle on-screen keyboard" })
+@@ -55,7 +51,6 @@ hl.bind("CTRL + SUPER + SHIFT + D", hl.dsp.global("quickshell:toggleLightDark"),
+ hl.bind("CTRL + SUPER + T", hl.dsp.exec_cmd(qsIsAlive .. " || " .. qsScripts .. "/colors/switchwall.sh"))
+ hl.bind("CTRL + SUPER + R", hl.dsp.exec_cmd("killall ydotool qs quickshell; qs -c $qsConfig &"),
+     { description = "Shell: Restart widgets" })
+-hl.bind("CTRL + SUPER + P", hl.dsp.global("quickshell:panelFamilyCycle"), { description = "Shell: Cycle panel family" })
+ 
+ --##! Utilities
+ --# Screenshot, Record, OCR, Color picker, Clipboard history
+@@ -73,12 +68,12 @@ hl.bind("SUPER + SHIFT + A", hl.dsp.exec_cmd(qsIsAlive .. " || pidof slurp || "
+ --# OCR
+ hl.bind("SUPER + SHIFT + X", hl.dsp.global("quickshell:regionOcr"),
+     { description = "Utilities: Character recognition >> clipboard" })
+-hl.bind("SUPER + SHIFT + T", hl.dsp.global("quickshell:screenTranslate"),
+-    { description = "Utilities: Translate screen content" })
+-hl.bind("SUPER + SHIFT + X", hl.dsp.exec_cmd(
+-    qsIsAlive ..
++hl.bind("SUPER + SHIFT + T", hl.dsp.global("quickshell:regionOcr"),
++    { description = "Utilities: Character recognition >> clipboard" })
++local ocrFallbackCmd = qsIsAlive ..
+     " || pidof slurp || grim -g \"$(slurp $SLURP_ARGS)\" \"/tmp/ocr_image.png\" && tesseract \"/tmp/ocr_image.png\" stdout -l $(tesseract --list-langs | awk 'NR>1{print $1}' | tr '\\\\n' '+' | sed 's/\\\\+$/\\\\n/') | wl-copy && rm \"/tmp/ocr_image.png\""
+-))
++hl.bind("SUPER + SHIFT + X", hl.dsp.exec_cmd(ocrFallbackCmd))
++hl.bind("SUPER + SHIFT + T", hl.dsp.exec_cmd(ocrFallbackCmd))
+ --# Color picker
+ hl.bind("SUPER + SHIFT + C", hl.dsp.exec_cmd("hyprpicker -a"),
+     { description = "Utilities: Pick color #RRGGBB >> clipboard" })
+@@ -100,10 +95,6 @@ hl.bind("CTRL + Print", hl.dsp.exec_cmd(
+     grimhyprctl .. " $(xdg-user-dir PICTURES)/Screenshots/Screenshot_\"$(date '+%Y-%m-%d_%H.%M.%S')\".png"
+ ), { locked = true, non_consuming = true, description = "Utilities: Screenshot >> clipboard & file" })
+ hl.bind("CTRL + Print", hl.dsp.exec_cmd(grimhyprctl .. " - | wl-copy"), { locked = true, non_consuming = true })
+---# AI
+-hl.bind("SUPER + SHIFT + ALT + mouse:273", hl.dsp.exec_cmd(hyprScripts .. "/ai/primary-buffer-query.sh"),
+-    { description = "Utilities: Generate AI summary for selected text" })
+--- (requires a running ollama model)
+ 
+ --##! Screen
+ --# Zoom
+@@ -194,112 +185,135 @@ hl.bind("SUPER + F", hl.dsp.window.fullscreen({ mode = "fullscreen", action = "t
+ hl.bind("SUPER + ALT + F", hl.dsp.window.fullscreen_state({ internal = 0, client = 3, action = "toggle" }),
+     { description = "Window: Fullscreen spoof" })
+ hl.bind("SUPER + P", hl.dsp.window.pin(), { description = "Window: Pin" })
++hl.bind("SUPER + H", hl.dsp.global("quickshell:minimizeFocused"), { description = "Window: Minimize to bar" })
+ 
+---#/# bind = SUPER+ALT, Hash,, -- Send to workspace -- (1, 2, 3,...)
+-for i = 1, 10 do
+-    hl.bind("SUPER + ALT + " .. (i % 10), function()
+-        hl.dispatch(hl.dsp.window.move({ workspace = workspace_in_group(i), follow = false }))
+-    end, { description = "Window: Send to workspace " .. i })
++--# Send window to slot N del MONITOR ENFOCADO (en su grupo activo)
++--  SUPER+ALT+N y SUPER+SHIFT+N: silent (tú te quedas en el ws actual)
++local wsMove = hyprScripts .. "/workspaces/move.sh"
++local wsGroupSize = 5
++for i = 1, wsGroupSize do
++    hl.bind("SUPER + SHIFT + " .. (i % 10),
++        hl.dsp.exec_cmd(wsMove .. " --action move --slot " .. i),
++        { description = "Window: Send to slot " .. i .. " (silent)" }) -- # [hidden]
+ end
+---# We also use raw keycodes because some keyboard layouts register number keys as different chars. The codes can be verified with `wev`
+--- for i = 1, 10 do
+---     local numberkey = { 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 }
+---     hl.bind("SUPER + ALT + code:" .. numberkey[i], function()
+---         hl.dispatch(hl.dsp.window.move({ workspace = workspace_in_group(i), follow = false }))
+---     end)
+--- end
+---# keypad numbers
+-for i = 1, 10 do
++for i = 1, wsGroupSize do
++    local numberkey = { 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 }
++    hl.bind("SUPER + SHIFT + code:" .. numberkey[i],
++        hl.dsp.exec_cmd(wsMove .. " --action move --slot " .. i))
++end
++for i = 1, wsGroupSize do
+     local numpadkey = { 87, 88, 89, 83, 84, 85, 79, 80, 81, 90 }
+-    hl.bind("SUPER + ALT + code:" .. numpadkey[i], function()
+-        hl.dispatch(hl.dsp.window.move({ workspace = workspace_in_group(i), follow = false }))
+-    end)
++    hl.bind("SUPER + SHIFT + code:" .. numpadkey[i],
++        hl.dsp.exec_cmd(wsMove .. " --action move --slot " .. i))
+ end
+ 
+---# #/# bind = SUPER+SHIFT, Scroll ↑/↓,, -- Send to workspace left/right
+-for i = 1, 4 do
+-    local key = { "SUPER + SHIFT + mouse_", "SUPER + ALT + mouse_" }
+-    local keycombos = { key[1] .. "down", key[1] .. "up", key[2] .. "down", key[2] .. "up" }
+-    local prefix = { "r-", "r+", "r-", "r+" }
+-    hl.bind(keycombos[i], hl.dsp.window.move({ workspace = prefix[i] .. "1" }))
+-end
++--# Mover ventana al slot anterior/siguiente del grupo del monitor (wrap)
++--  scroll arriba = slot anterior, scroll abajo = slot siguiente
++hl.bind("SUPER + SHIFT + mouse_up",   hl.dsp.exec_cmd(wsMove .. " --action move --slot-dir -1"))
++hl.bind("SUPER + SHIFT + mouse_down", hl.dsp.exec_cmd(wsMove .. " --action move --slot-dir +1"))
+ 
+---#/# bind = SUPER+SHIFT, Page_↑/↓,, -- Send to workspace left/right
+-for i = 1, 2 do
+-    local keydirs = { "Up", "Down" }
+-    local prefix = { "r-", "r+" }
+-    local descdir = { "left", "right" }
+-    hl.bind("SUPER + SHIFT + Page_" .. keydirs[i], hl.dsp.window.move({ workspace = prefix[i] .. "1" }), {description = "Window: Send to workspace " .. descdir[i]})
+-end
+-for i = 1, 4 do
+-    local key = { "SUPER + ALT + Page_", "CTRL + SUPER + SHIFT + " }
+-    local keycombos = { key[1] .. "down", key[1] .. "up", key[2] .. "Right", key[2] .. "Left" }
+-    local prefix = { "r+", "r-", "r+", "r-" }
+-    hl.bind(keycombos[i], hl.dsp.window.move({ workspace = prefix[i] .. "1" })) -- # [hidden]
+-end
++hl.bind("SUPER + SHIFT + Page_Up",
++    hl.dsp.exec_cmd(wsMove .. " --action move --slot-dir -1"),
++    {description = "Window: Send to workspace left"})
++hl.bind("SUPER + SHIFT + Page_Down",
++    hl.dsp.exec_cmd(wsMove .. " --action move --slot-dir +1"),
++    {description = "Window: Send to workspace right"})
++
++hl.bind("SUPER + ALT + Page_Up",      hl.dsp.exec_cmd(wsMove .. " --action move --slot-dir -1")) -- # [hidden]
++hl.bind("SUPER + ALT + Page_Down",    hl.dsp.exec_cmd(wsMove .. " --action move --slot-dir +1")) -- # [hidden]
++
++--# CTRL+SUPER+SHIFT+←/→: mover ventana al slot anterior/siguiente Y desplazarse
++hl.bind("CTRL + SUPER + SHIFT + Right",
++    hl.dsp.exec_cmd(wsMove .. " --action movefollow --slot-dir +1"),
++    { description = "Window: Move with follow right" })
++hl.bind("CTRL + SUPER + SHIFT + Left",
++    hl.dsp.exec_cmd(wsMove .. " --action movefollow --slot-dir -1"),
++    { description = "Window: Move with follow left" })
++
++--# Mover ventana al grupo siguiente/anterior del monitor enfocado
++hl.bind("SUPER + SHIFT + ALT + Page_Up",
++    hl.dsp.exec_cmd(wsMove .. " --action move --group-dir -1"),
++    { description = "Window: Send to previous group" })
++hl.bind("SUPER + SHIFT + ALT + Page_Down",
++    hl.dsp.exec_cmd(wsMove .. " --action move --group-dir +1"),
++    { description = "Window: Send to next group" })
+ 
+ hl.bind("SUPER + ALT + S",
+     hl.dsp.window.move({ workspace = "special:special", follow = false }), { description = "Window: Send to scratchpad" })
+ hl.bind("CTRL + SUPER + S", hl.dsp.workspace.toggle_special("special"))
+ 
+ --##! Workspace
+---# Switching
+---#/# bind = SUPER, Hash,, -- Focus workspace -- (1, 2, 3,...)
+-for i = 1, 10 do
+-    hl.bind("SUPER + " .. (i % 10), function()
+-        hl.dispatch(hl.dsp.focus({ workspace = workspace_in_group(i) }))
+-    end, { description = "Workspace: Focus " .. i })
++--# Foco al slot N del MONITOR ENFOCADO (en su grupo activo)
++--  SUPER+1..5 -> slot 1..5 del monitor donde estás parado (no salta de monitor)
++for i = 1, wsGroupSize do
++    hl.bind("SUPER + " .. (i % 10),
++        hl.dsp.exec_cmd(wsMove .. " --action focus --slot " .. i),
++        { description = "Workspace: Focus slot " .. i })
+ end
+---# We also use raw keycodes because some keyboard layouts register number keys as different chars. The codes can be verified with `wev`
+-for i = 1, 10 do
++for i = 1, wsGroupSize do
+     local numberkey = { 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 }
+-    hl.bind("SUPER + code:" .. numberkey[i], function()
+-        hl.dispatch(hl.dsp.focus({ workspace = workspace_in_group(i) }))
+-    end)
++    hl.bind("SUPER + code:" .. numberkey[i],
++        hl.dsp.exec_cmd(wsMove .. " --action focus --slot " .. i))
+ end
+---# keypad numbers
+-for i = 1, 10 do
++for i = 1, wsGroupSize do
+     local numpadkey = { 87, 88, 89, 83, 84, 85, 79, 80, 81, 90 }
+-    hl.bind("SUPER + code:" .. numpadkey[i], function()
+-        hl.dispatch(hl.dsp.focus({ workspace = workspace_in_group(i) }))
+-    end)
++    hl.bind("SUPER + code:" .. numpadkey[i],
++        hl.dsp.exec_cmd(wsMove .. " --action focus --slot " .. i))
+ end
+ 
+---#/# bind = CTRL+SUPER, ←/→,, -- Focus left/right
+---#/# bind = CTRL+SUPER+ALT, ←/→,, -- # [hidden] Focus busy left/right
+-for i = 1, 2 do
+-    local keys = { "Left", "Right" }
+-    local prefix = { "r-", "r+" }
+-    local descdir = { "left", "right" }
+-    hl.bind("CTRL + SUPER + " .. keys[i], hl.dsp.focus({ workspace = prefix[i] .. "1" }), {description = "Workspace: Focus " .. descdir[i]})
+-end
+-for i = 1, 2 do
+-    local keys = { "Left", "Right" }
+-    local prefix = { "m-", "m+" }
+-    hl.bind("CTRL + SUPER + ALT + " .. keys[i], hl.dsp.focus({ workspace = prefix[i] .. "1" }))
+-end
+---#/# bind = SUPER, Page_↑/↓,, -- Focus left/right
+-for i = 1, 4 do
+-    local key = { "SUPER + Page_Down", "SUPER + Page_Up" }
+-    local keycombos = { key[1], key[2], "CTRL + " .. key[1], "CTRL + " .. key[2] }
+-    local prefix = { "r+", "r-", "r+", "r-" }
+-    hl.bind(keycombos[i], hl.dsp.focus({ workspace = prefix[i] .. "1" }))
+-end
+---#/# bind = SUPER, Scroll ↑/↓,, -- Focus left/right
+-for i = 1, 4 do
+-    local key = { "SUPER + mouse_up", "SUPER + mouse_down" }
+-    local keycombos = { key[1], key[2], "CTRL + " .. key[1], "CTRL + " .. key[2] }
+-    local prefix = { "+", "-", "r+", "r-" }
+-    hl.bind(keycombos[i], hl.dsp.focus({ workspace = prefix[i] .. "1" }))
+-end
++--# CTRL+SUPER+←/→: slot anterior/siguiente del monitor enfocado (wrap dentro del grupo)
++hl.bind("CTRL + SUPER + Left",
++    hl.dsp.exec_cmd(wsMove .. " --action focus --slot-dir -1"),
++    {description = "Workspace: Focus left"})
++hl.bind("CTRL + SUPER + Right",
++    hl.dsp.exec_cmd(wsMove .. " --action focus --slot-dir +1"),
++    {description = "Workspace: Focus right"})
++--# CTRL+SUPER+ALT+←/→: foco al workspace "ocupado" más cercano (dispatcher nativo)
++-- for i = 1, 2 do
++--     local keys = { "Left", "Right" }
++--     local prefix = { "m-", "m+" }
++--     hl.bind("CTRL + SUPER + ALT + " .. keys[i], hl.dsp.focus({ workspace = prefix[i] .. "1" }))
++-- end
++--# SUPER+Page_↑/↓ y CTRL+SUPER+Page_↑/↓: slot prev/next (wrap)
++hl.bind("SUPER + Page_Up",          hl.dsp.exec_cmd(wsMove .. " --action focus --slot-dir -1"))
++hl.bind("SUPER + Page_Down",        hl.dsp.exec_cmd(wsMove .. " --action focus --slot-dir +1"))
++hl.bind("CTRL + SUPER + Page_Up",   hl.dsp.exec_cmd(wsMove .. " --action focus --slot-dir -1"))
++hl.bind("CTRL + SUPER + Page_Down", hl.dsp.exec_cmd(wsMove .. " --action focus --slot-dir +1"))
++
++--# SUPER+scroll: foco slot prev/next (scroll arriba = anterior, abajo = siguiente)
++hl.bind("SUPER + mouse_up",        hl.dsp.exec_cmd(wsMove .. " --action focus --slot-dir -1"))
++hl.bind("SUPER + mouse_down",      hl.dsp.exec_cmd(wsMove .. " --action focus --slot-dir +1"))
++--# CTRL+SUPER+scroll: mover ventana Y desplazarse al slot prev/next
++hl.bind("CTRL + SUPER + mouse_up",
++    hl.dsp.exec_cmd(wsMove .. " --action movefollow --slot-dir -1"),
++    { description = "Window: Move with follow (scroll up)" })
++hl.bind("CTRL + SUPER + mouse_down",
++    hl.dsp.exec_cmd(wsMove .. " --action movefollow --slot-dir +1"),
++    { description = "Window: Move with follow (scroll down)" })
++
+ --## Special
+ hl.bind("SUPER + S", hl.dsp.workspace.toggle_special("special"), { description = "Workspace: Toggle scratchpad" })
+ hl.bind("SUPER + mouse:275", hl.dsp.workspace.toggle_special("special"))
+-for i = 1, 4 do
+-    local key = { "BracketLeft", "BracketRight", "Up", "Down" }
+-    local prefix = { "-1", "+1", "r-5", "r+5" }
+-    hl.bind("CTRL + SUPER + " .. key[i], hl.dsp.focus({ workspace = prefix[i] }))
+-end
++--# CTRL+SUPER+Brackets: slot anterior/siguiente con wrap (igual que CTRL+SUPER+←/→)
++hl.bind("CTRL + SUPER + BracketLeft",
++    hl.dsp.exec_cmd(wsMove .. " --action focus --slot-dir -1"))
++hl.bind("CTRL + SUPER + BracketRight",
++    hl.dsp.exec_cmd(wsMove .. " --action focus --slot-dir +1"))
++--# CTRL+SUPER+↑/↓: cambia de grupo en el monitor enfocado (respeta CYCLE_ONLY)
++--  Up = siguiente grupo (+1), Down = grupo anterior (-1)
++hl.bind("CTRL + SUPER + Up",
++    hl.dsp.exec_cmd(wsMove .. " --action focus --group-dir +1"),
++    { description = "Workspace: Next group" })
++hl.bind("CTRL + SUPER + Down",
++    hl.dsp.exec_cmd(wsMove .. " --action focus --group-dir -1"),
++    { description = "Workspace: Previous group" })
++--# CTRL+SUPER+SHIFT+↑/↓: mover ventana al grupo ±1 Y desplazarse
++hl.bind("CTRL + SUPER + SHIFT + Up",
++    hl.dsp.exec_cmd(wsMove .. " --action movefollow --group-dir +1"),
++    { description = "Window: Move with follow to next group" })
++hl.bind("CTRL + SUPER + SHIFT + Down",
++    hl.dsp.exec_cmd(wsMove .. " --action movefollow --group-dir -1"),
++    { description = "Window: Move with follow to previous group" })
+ 
+ --##! Virtual machines
+ hl.define_submap("virtual-machine", function()
+@@ -332,7 +346,7 @@ hl.bind("SUPER + ALT + Equal",
+     hl.dsp.exec_cmd("notify-send 'Urgent notification' 'Ah hell no' -u critical -a 'Hyprland keybind'")) -- # [hidden]
+ 
+ --##! Session
+-hl.bind("SUPER + L", hl.dsp.exec_cmd("loginctl lock-session"), { description = "Session: Lock" })
++hl.bind("SUPER + L", hl.dsp.exec_cmd("loginctl lock-session && sleep 0.3 && hyprctl dispatch 'hl.dsp.dpms(false)'"), { description = "Session: Lock" })
+ hl.bind("SUPER + SHIFT + L", hl.dsp.exec_cmd("systemctl suspend || loginctl suspend"),
+     { locked = true, description = "Session: Sleep" }) -- Sleep
+ -- hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("systemctl suspend || loginctl suspend"), {locked = true} ) -- # [hidden] Suspend when laptop lid is closed, uncomment if for whatever reason it's not the default behavior
+@@ -347,6 +361,7 @@ hl.bind("SUPER + T", hl.dsp.exec_cmd(terminal))
+ hl.bind("CTRL + ALT + T", hl.dsp.exec_cmd(terminal))
+ hl.bind("SUPER + E", hl.dsp.exec_cmd(fileManager), { description = "App: File manager" })
+ hl.bind("SUPER + W", hl.dsp.exec_cmd(browser), { description = "App: Browser" })
++hl.bind("SUPER + SHIFT + W", hl.dsp.exec_cmd(browserIncognito), { description = "App: Browser (incognito)" })
+ hl.bind("SUPER + C", hl.dsp.exec_cmd(codeEditor), { description = "App: Code editor" })
+ hl.bind("CTRL + SUPER + SHIFT + ALT + W", hl.dsp.exec_cmd(officeSoftware), { description = "App: Office software" })
+ hl.bind("SUPER + X", hl.dsp.exec_cmd(textEditor), { description = "App: Text editor" })

@@ -1,0 +1,64 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/bar/ActiveWindow.qml b/dots/.config/quickshell/ii/modules/ii/bar/ActiveWindow.qml
+index b4f1c69c..e877fc17 100644
+--- a/dots/.config/quickshell/ii/modules/ii/bar/ActiveWindow.qml
++++ b/dots/.config/quickshell/ii/modules/ii/bar/ActiveWindow.qml
+@@ -9,18 +9,29 @@ import Quickshell.Hyprland
+ 
+ Item {
+     id: root
++
++    // Per-monitor: used only as fallback when no app is focused
+     readonly property HyprlandMonitor monitor: Hyprland.monitorFor(root.QsWindow.window?.screen)
+-    readonly property Toplevel activeWindow: ToplevelManager.activeToplevel
++    readonly property var monitorData: HyprlandData.monitors.find(m => m.id === root.monitor?.id)
++    readonly property var workspaceId: root.monitorData?.activeWorkspace?.id
++
++    // Globally active window — same on every monitor's bar
++    readonly property Toplevel activeToplevel: ToplevelManager.activeToplevel
++    readonly property bool hasActive: root.activeToplevel !== null
++                                   && root.activeToplevel?.activated === true
+ 
+-    property string activeWindowAddress: `0x${activeWindow?.HyprlandToplevel?.address}`
+-    property bool focusingThisMonitor: HyprlandData.activeWorkspace?.monitor == monitor?.name
+-    property var biggestWindow: HyprlandData.biggestWindowForWorkspace(HyprlandData.monitors[root.monitor?.id]?.activeWorkspace.id)
++    readonly property string displayClass: root.hasActive
++        ? root.activeToplevel.appId
++        : Translation.tr("Desktop")
++
++    readonly property string displayTitle: root.hasActive
++        ? root.activeToplevel.title
++        : `${Translation.tr("Workspace")} ${root.workspaceId ?? 1}`
+ 
+     implicitWidth: colLayout.implicitWidth
+ 
+     ColumnLayout {
+         id: colLayout
+-
+         anchors.verticalCenter: parent.verticalCenter
+         anchors.left: parent.left
+         anchors.right: parent.right
+@@ -31,10 +42,7 @@ Item {
+             font.pixelSize: Appearance.font.pixelSize.smaller
+             color: Appearance.colors.colSubtext
+             elide: Text.ElideRight
+-            text: root.focusingThisMonitor && root.activeWindow?.activated && root.biggestWindow ? 
+-                root.activeWindow?.appId :
+-                (root.biggestWindow?.class) ?? Translation.tr("Desktop")
+-
++            text: root.displayClass
+         }
+ 
+         StyledText {
+@@ -42,11 +50,7 @@ Item {
+             font.pixelSize: Appearance.font.pixelSize.small
+             color: Appearance.colors.colOnLayer0
+             elide: Text.ElideRight
+-            text: root.focusingThisMonitor && root.activeWindow?.activated && root.biggestWindow ? 
+-                root.activeWindow?.title :
+-                (root.biggestWindow?.title) ?? `${Translation.tr("Workspace")} ${monitor?.activeWorkspace?.id ?? 1}`
++            text: root.displayTitle
+         }
+-
+     }
+-
+ }

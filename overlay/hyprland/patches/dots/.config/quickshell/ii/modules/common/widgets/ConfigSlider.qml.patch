@@ -1,0 +1,12 @@
+diff --git a/dots/.config/quickshell/ii/modules/common/widgets/ConfigSlider.qml b/dots/.config/quickshell/ii/modules/common/widgets/ConfigSlider.qml
+index edc63191..0c5f52d0 100644
+--- a/dots/.config/quickshell/ii/modules/common/widgets/ConfigSlider.qml
++++ b/dots/.config/quickshell/ii/modules/common/widgets/ConfigSlider.qml
+@@ -17,6 +17,7 @@ RowLayout {
+     property bool usePercentTooltip: true
+     property real from: slider.from
+     property real to: slider.to
++    property alias stepSize: slider.stepSize
+     property real textWidth: 120
+ 
+     RowLayout {

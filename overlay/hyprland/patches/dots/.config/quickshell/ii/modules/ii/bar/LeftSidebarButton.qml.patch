@@ -1,0 +1,113 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml b/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml
+index 6c73ca72..853b3c1e 100644
+--- a/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml
++++ b/dots/.config/quickshell/ii/modules/ii/bar/LeftSidebarButton.qml
+@@ -1,83 +1,43 @@
+ import QtQuick
+ import qs
+-import qs.services
+ import qs.modules.common
+ import qs.modules.common.widgets
++import qs.services
+ 
+-RippleButton {
++// Static decorative icon at the start of the bar — no hover, no click.
++// Shows Config.options.cheatsheet.superKey (Nerd Font glyph) when set,
++// otherwise falls back to the distro icon SVG.
++Item {
+     id: root
+ 
+-    property bool showPing: false
+-
+-    property bool aiChatEnabled: Config.options.policies.ai !== 0
+-    property bool translatorEnabled: Config.options.sidebar.translator.enable
+-    property bool animeEnabled: Config.options.policies.weeb !== 0
+-    visible: aiChatEnabled || translatorEnabled || animeEnabled
+-
+-    property real buttonPadding: 5
+-    implicitWidth: distroIcon.width + buttonPadding * 2
+-    implicitHeight: distroIcon.height + buttonPadding * 2
+-    buttonRadius: Appearance.rounding.full
+-    colBackgroundHover: Appearance.colors.colLayer1Hover
+-    colRipple: Appearance.colors.colLayer1Active
+-    colBackgroundToggled: Appearance.colors.colSecondaryContainer
+-    colBackgroundToggledHover: Appearance.colors.colSecondaryContainerHover
+-    colRippleToggled: Appearance.colors.colSecondaryContainerActive
+-    toggled: GlobalStates.sidebarLeftOpen
+-
+-    onPressed: {
+-        GlobalStates.sidebarLeftOpen = !GlobalStates.sidebarLeftOpen;
+-    }
+-
+-    Connections {
+-        target: Ai
+-        function onResponseFinished() {
+-            if (GlobalStates.sidebarLeftOpen) return;
+-            root.showPing = true;
+-        }
+-    }
++    property real iconSize: 19.5
++    property real padding: 5
++    property bool useSuperKey: Config.options.cheatsheet.superKey !== ""
+ 
+-    Connections {
+-        target: Booru
+-        function onResponseFinished() {
+-            if (GlobalStates.sidebarLeftOpen) return;
+-            root.showPing = true;
+-        }
+-    }
++    implicitWidth: iconSize + padding * 2
++    implicitHeight: iconSize + padding * 2
+ 
+-    Connections {
+-        target: GlobalStates
+-        function onSidebarLeftOpenChanged() {
+-            root.showPing = false;
+-        }
++    // Nerd Font glyph (e.g. 󰖳) — shown when superKey is configured
++    StyledText {
++        anchors.centerIn: parent
++        visible: root.useSuperKey
++        text: Config.options.cheatsheet.superKey
++        font.pixelSize: root.iconSize
++        font.family: Appearance.font.family.mono
++        color: Appearance.colors.colOnLayer0
++        horizontalAlignment: Text.AlignHCenter
++        verticalAlignment: Text.AlignVCenter
+     }
+ 
++    // Distro icon SVG — fallback when superKey is empty
+     CustomIcon {
+-        id: distroIcon
+         anchors.centerIn: parent
+-        width: 19.5
+-        height: 19.5
++        visible: !root.useSuperKey
++        width: root.iconSize
++        height: root.iconSize
+         source: Config.options.bar.topLeftIcon == 'distro' ? SystemInfo.distroIcon : `${Config.options.bar.topLeftIcon}-symbolic`
+         colorize: true
+         color: Appearance.colors.colOnLayer0
+-
+-        Rectangle {
+-            opacity: root.showPing ? 1 : 0
+-            visible: opacity > 0
+-            anchors {
+-                bottom: parent.bottom
+-                right: parent.right
+-                bottomMargin: -2
+-                rightMargin: -2
+-            }
+-            implicitWidth: 8
+-            implicitHeight: 8
+-            radius: Appearance.rounding.full
+-            color: Appearance.colors.colTertiary
+-
+-            Behavior on opacity {
+-                animation: Appearance.animation.elementMoveFast.numberAnimation.createObject(this)
+-            }
+-        }
+     }
++
+ }

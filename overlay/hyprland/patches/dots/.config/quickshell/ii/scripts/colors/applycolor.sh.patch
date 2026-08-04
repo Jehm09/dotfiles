@@ -1,0 +1,78 @@
+diff --git a/dots/.config/quickshell/ii/scripts/colors/applycolor.sh b/dots/.config/quickshell/ii/scripts/colors/applycolor.sh
+index a215c5ab..20820476 100755
+--- a/dots/.config/quickshell/ii/scripts/colors/applycolor.sh
++++ b/dots/.config/quickshell/ii/scripts/colors/applycolor.sh
+@@ -8,9 +8,17 @@ CONFIG_DIR="$XDG_CONFIG_HOME/quickshell/$QUICKSHELL_CONFIG_NAME"
+ CACHE_DIR="$XDG_CACHE_HOME/quickshell"
+ STATE_DIR="$XDG_STATE_HOME/quickshell"
+ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
++TERMINAL_THEME_DIR="$STATE_DIR/user/generated/terminal"
++
++CONFIG_FILE="$XDG_CONFIG_HOME/settings/quickshell/config.json"
++term_alpha=100
++if [ -f "$CONFIG_FILE" ]; then
++  _opacity=$(jq -r '.appearance.wallpaperTheming.terminalGenerationProps.opacity // 1.0' "$CONFIG_FILE" 2>/dev/null)
++  if [ -n "$_opacity" ] && [ "$_opacity" != "null" ]; then
++    term_alpha=$(awk "BEGIN{printf \"%.0f\", $_opacity * 100}")
++  fi
++fi
+ 
+-term_alpha=100 #Set this to < 100 make all your terminals transparent
+-# sleep 0 # idk i wanted some delay or colors dont get applied properly
+ if [ ! -d "$STATE_DIR"/user/generated ]; then
+   mkdir -p "$STATE_DIR"/user/generated
+ fi
+@@ -34,13 +42,17 @@ apply_kitty() {
+     return
+   fi
+   # Copy template
+-  mkdir -p "$STATE_DIR"/user/generated/terminal
+-  cp "$SCRIPT_DIR/terminal/kitty-theme.conf" "$STATE_DIR"/user/generated/terminal/kitty-theme.conf
++  mkdir -p "$TERMINAL_THEME_DIR"
++  cp "$SCRIPT_DIR/terminal/kitty-theme.conf" "$TERMINAL_THEME_DIR"/kitty-theme.conf
+   # Apply colors
+   for i in "${!colorlist[@]}"; do
+-    sed -i "s/${colorlist[$i]} #/${colorvalues[$i]#\#}/g" "$STATE_DIR"/user/generated/terminal/kitty-theme.conf
++    sed -i "s/${colorlist[$i]} #/${colorvalues[$i]#\#}/g" "$TERMINAL_THEME_DIR"/kitty-theme.conf
+   done
+ 
++  # Apply opacity
++  _kitty_opacity=$(awk "BEGIN{printf \"%.2f\", $term_alpha / 100}")
++  echo "background_opacity $_kitty_opacity" >> "$TERMINAL_THEME_DIR/kitty-theme.conf"
++
+   # Reload
+   if ! pgrep -f kitty >/dev/null; then
+     return
+@@ -55,19 +67,19 @@ apply_anyterm() {
+     return
+   fi
+   # Copy template
+-  mkdir -p "$STATE_DIR"/user/generated/terminal
+-  cp "$SCRIPT_DIR/terminal/sequences.txt" "$STATE_DIR"/user/generated/terminal/sequences.txt
++  mkdir -p "$TERMINAL_THEME_DIR"
++  cp "$SCRIPT_DIR/terminal/sequences.txt" "$TERMINAL_THEME_DIR"/sequences.txt
+   # Apply colors
+   for i in "${!colorlist[@]}"; do
+-    sed -i "s/${colorlist[$i]} #/${colorvalues[$i]#\#}/g" "$STATE_DIR"/user/generated/terminal/sequences.txt
++    sed -i "s/${colorlist[$i]} #/${colorvalues[$i]#\#}/g" "$TERMINAL_THEME_DIR"/sequences.txt
+   done
+ 
+-  sed -i "s/\$alpha/$term_alpha/g" "$STATE_DIR/user/generated/terminal/sequences.txt"
++  sed -i "s/\$alpha/$term_alpha/g" "$TERMINAL_THEME_DIR/sequences.txt"
+ 
+   for file in /dev/pts/*; do
+     if [[ $file =~ ^/dev/pts/[0-9]+$ ]]; then
+       {
+-      cat "$STATE_DIR"/user/generated/terminal/sequences.txt >"$file"
++      cat "$TERMINAL_THEME_DIR"/sequences.txt >"$file"
+       } & disown || true
+     fi
+   done
+@@ -79,7 +91,6 @@ apply_term() {
+ }
+ 
+ # Check if terminal theming is enabled in config
+-CONFIG_FILE="$XDG_CONFIG_HOME/illogical-impulse/config.json"
+ if [ -f "$CONFIG_FILE" ]; then
+   enable_terminal=$(jq -r '.appearance.wallpaperTheming.enableTerminal' "$CONFIG_FILE")
+   if [ "$enable_terminal" = "true" ]; then

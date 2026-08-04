@@ -1,0 +1,87 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/bar/SysTrayItem.qml b/dots/.config/quickshell/ii/modules/ii/bar/SysTrayItem.qml
+index 859d0421..f03ead70 100644
+--- a/dots/.config/quickshell/ii/modules/ii/bar/SysTrayItem.qml
++++ b/dots/.config/quickshell/ii/modules/ii/bar/SysTrayItem.qml
+@@ -21,17 +21,34 @@ MouseArea {
+     acceptedButtons: Qt.LeftButton | Qt.RightButton
+     implicitWidth: 20
+     implicitHeight: 20
++    function toggleMenu() {
++        if (!item.hasMenu)
++            return;
++        if (menu.active && menu.item && typeof menu.item.close === "function")
++            menu.item.close();
++        else
++            menu.open();
++    }
++
++    readonly property string identity: `${item.id ?? ""} ${item.title ?? ""} ${item.tooltipTitle ?? ""}`.toLowerCase()
++    readonly property bool isSteam: identity.includes("steam")
++
+     onPressed: (event) => {
+         switch (event.button) {
+         case Qt.LeftButton:
+-            item.activate();
++            if (root.isSteam) {
++                // Steam ignores the SNI Activate call, so re-run the command; an
++                // already-running Steam just shows its main window.
++                Quickshell.execDetached(["sh", "-c", "steam || flatpak run com.valvesoftware.Steam"]);
++            } else if (item.onlyMenu && item.hasMenu) {
++                // Items that only offer a menu (don't implement Activate): show it.
++                root.toggleMenu();
++            } else {
++                item.activate();
++            }
+             break;
+         case Qt.RightButton:
+-            if (item.hasMenu)
+-                if (menu.active && menu.item && typeof menu.item.close === "function")
+-                    menu.item.close();
+-                else 
+-                    menu.open();
++            root.toggleMenu();
+             break;
+         }
+         event.accepted = true;
+@@ -101,6 +118,41 @@ MouseArea {
+         extraVisibleCondition: root.containsMouse
+         alternativeVisibleCondition: extraVisibleCondition
+         anchorEdges: (!Config.options.bar.bottom && !Config.options.bar.vertical) ? Edges.Bottom : Edges.Top
++        // Leave room for the drop shadow so it isn't clipped by the popup surface.
++        horizontalMargin: Appearance.sizes.elevationMargin
++        verticalMargin: Appearance.sizes.elevationMargin
++
++        // Match the right-click menu's look: colLayer0 background, border, rounding,
++        // shadow and on-layer text, instead of the default dark tooltip.
++        contentItem: Item {
++            implicitWidth: tooltipBackground.implicitWidth
++            implicitHeight: tooltipBackground.implicitHeight
++
++            StyledRectangularShadow {
++                target: tooltipBackground
++            }
++            Rectangle {
++                id: tooltipBackground
++                anchors.centerIn: parent
++                color: Appearance.colors.colLayer0
++                radius: Appearance.rounding.windowRounding
++                border.width: 1
++                border.color: Appearance.colors.colLayer0Border
++                implicitWidth: tooltipLabel.implicitWidth + 24
++                implicitHeight: tooltipLabel.implicitHeight + 14
++
++                StyledText {
++                    id: tooltipLabel
++                    anchors.centerIn: parent
++                    width: Math.min(implicitWidth, 360)
++                    text: tooltip.text
++                    color: Appearance.colors.colOnLayer0
++                    font.pixelSize: Appearance.font.pixelSize.smallie
++                    horizontalAlignment: Text.AlignHCenter
++                    wrapMode: Text.Wrap
++                }
++            }
++        }
+     }
+ 
+ }

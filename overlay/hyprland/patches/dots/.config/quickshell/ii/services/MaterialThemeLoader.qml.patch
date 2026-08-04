@@ -1,0 +1,53 @@
+diff --git a/dots/.config/quickshell/ii/services/MaterialThemeLoader.qml b/dots/.config/quickshell/ii/services/MaterialThemeLoader.qml
+index 6012566d..f951a75f 100644
+--- a/dots/.config/quickshell/ii/services/MaterialThemeLoader.qml
++++ b/dots/.config/quickshell/ii/services/MaterialThemeLoader.qml
+@@ -16,6 +16,15 @@ Singleton {
+     property string filePath: Directories.generatedMaterialThemePath
+ 
+     function reapplyTheme() {
++        // Re-apply already-loaded content directly — reload() alone doesn't re-trigger
++        // onLoadedChanged when the file on disk hasn't changed (e.g. slider move).
++        try {
++            const content = themeFileView.text()
++            if (content && content.length > 2) {
++                root.applyColors(content)
++                return
++            }
++        } catch(e) {}
+         themeFileView.reload()
+     }
+ 
+@@ -29,8 +38,31 @@ Singleton {
+                 Appearance.m3colors[m3Key] = json[key]
+             }
+         }
+-        
++
+         Appearance.m3colors.darkmode = (Appearance.m3colors.m3background.hslLightness < 0.5)
++
++        // Darken all surface colors in dark mode.
++        // Affects every quickshell component regardless of whether it reads m3colors.* directly
++        // or via the derived Appearance.colors.col* properties.
++        if (Appearance.m3colors.darkmode) {
++            const factor = 1.0 + (Config?.options.appearance.darkModeSurfaces ?? 0) * 0.5
++            if (factor > 1.001) {
++                const surfaces = [
++                    'm3background', 'm3surface', 'm3surfaceDim', 'm3surfaceBright',
++                    'm3surfaceContainerLowest', 'm3surfaceContainerLow',
++                    'm3surfaceContainer', 'm3surfaceContainerHigh', 'm3surfaceContainerHighest'
++                ]
++                for (const key of surfaces) {
++                    Appearance.m3colors[key] = Qt.darker(Appearance.m3colors[key], factor)
++                }
++            }
++        }
++    }
++
++    // Re-apply when the user adjusts the dark surfaces slider in Settings
++    Connections {
++        target: Config.options.appearance
++        function onDarkModeSurfacesChanged() { root.reapplyTheme() }
+     }
+ 
+     function resetFilePathNextTime() {

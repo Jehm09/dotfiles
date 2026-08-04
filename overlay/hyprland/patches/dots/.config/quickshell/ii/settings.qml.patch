@@ -1,0 +1,41 @@
+diff --git a/dots/.config/quickshell/ii/settings.qml b/dots/.config/quickshell/ii/settings.qml
+index 65c64c16..45e6b3b8 100644
+--- a/dots/.config/quickshell/ii/settings.qml
++++ b/dots/.config/quickshell/ii/settings.qml
+@@ -28,6 +28,11 @@ ApplicationWindow {
+             icon: "instant_mix",
+             component: "modules/settings/QuickConfig.qml"
+         },
++        {
++            name: Translation.tr("Display"),
++            icon: "monitor",
++            component: "modules/settings/DisplayConfig.qml"
++        },
+         {
+             name: Translation.tr("General"),
+             icon: "browse",
+@@ -54,6 +59,11 @@ ApplicationWindow {
+             icon: "settings",
+             component: "modules/settings/ServicesConfig.qml"
+         },
++        {
++            name: Translation.tr("Performance"),
++            icon: "speed",
++            component: "modules/settings/PerformanceConfig.qml"
++        },
+         {
+             name: Translation.tr("Advanced"),
+             icon: "construction",
+@@ -182,10 +192,10 @@ ApplicationWindow {
+                         buttonText: justCopied ? Translation.tr("Path copied") : Translation.tr("Config file")
+                         expanded: navRail.expanded
+                         downAction: () => {
+-                            Qt.openUrlExternally(`${Directories.config}/illogical-impulse/config.json`);
++                            Qt.openUrlExternally(`file://${Directories.shellConfigPath}`);
+                         }
+                         altAction: () => {
+-                            Quickshell.clipboardText = CF.FileUtils.trimFileProtocol(`${Directories.config}/illogical-impulse/config.json`);
++                            Quickshell.clipboardText = Directories.shellConfigPath;
+                             fab.justCopied = true;
+                             revertTextTimer.restart()
+                         }

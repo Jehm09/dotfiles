@@ -1,0 +1,64 @@
+diff --git a/dots/.config/quickshell/ii/services/SystemInfo.qml b/dots/.config/quickshell/ii/services/SystemInfo.qml
+index ac540d53..fa3ffab5 100644
+--- a/dots/.config/quickshell/ii/services/SystemInfo.qml
++++ b/dots/.config/quickshell/ii/services/SystemInfo.qml
+@@ -23,6 +23,13 @@ Singleton {
+     property string desktopEnvironment: ""
+     property string windowingSystem: ""
+ 
++    // Hardware info — populated on load
++    property string kernelVersion: ""
++    property string cpuModel: ""
++    property string gpuModel: ""
++    property string ramTotal: ""
++    property string diskInfo: ""
++
+     Timer {
+         triggeredOnStart: true
+         interval: 1
+@@ -115,4 +122,44 @@ Singleton {
+         id: fileOsRelease
+         path: "/etc/os-release"
+     }
++
++    Process {
++        running: true
++        command: ["uname", "-r"]
++        stdout: SplitParser {
++            onRead: data => { root.kernelVersion = data.trim() }
++        }
++    }
++
++    Process {
++        running: true
++        command: ["bash", "-c", "grep -m1 'model name' /proc/cpuinfo | cut -d: -f2 | xargs"]
++        stdout: SplitParser {
++            onRead: data => { root.cpuModel = data.trim() }
++        }
++    }
++
++    Process {
++        running: true
++        command: ["bash", "-c", "lspci | grep -Ei 'VGA|3D controller|Display controller' | head -1 | sed \"s/.*: //;s/ (rev [0-9a-f]*)$//\""]
++        stdout: SplitParser {
++            onRead: data => { root.gpuModel = data.trim() }
++        }
++    }
++
++    Process {
++        running: true
++        command: ["bash", "-c", "free -b | awk '/^Mem/{printf \"%.0f GB\", $2/1073741824}'"]
++        stdout: SplitParser {
++            onRead: data => { root.ramTotal = data.trim() }
++        }
++    }
++
++    Process {
++        running: true
++        command: ["bash", "-c", "df -h / | awk 'NR==2{print $3 \" / \" $2}'"]
++        stdout: SplitParser {
++            onRead: data => { root.diskInfo = data.trim() }
++        }
++    }
+ }
+\ No newline at end of file
