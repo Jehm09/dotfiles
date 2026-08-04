@@ -1,0 +1,61 @@
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: Simple Customizable Power Menu for KDE\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: 23-11-21\n"
+"PO-Revision-Date: 23-11-21\n"
+"Last-Translator: Dervart\n"
+"Language: Russian\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: ../contents/config/config.qml
+msgid "General"
+msgstr "Настройки виджета"
+
+#: ../contents/config/config.qml
+msgid "Apps"
+msgstr "Список приложений"
+
+#: ../contents/ui/configGeneral.qml
+msgid "Widget Icon :"
+msgstr "Иконка виджета"
+
+#: ../contents/ui/configGeneral.qml
+msgid "Show Lock / Log Out buttons"
+msgstr "Показывать кнопки (Заблокировать / Выйти)"
+
+#: ../contents/ui/configGeneral.qml
+msgid "Show Restart / Sleep buttons"
+msgstr "Показывать кнопки (Перезагрузка / Сон)"
+
+#: ../contents/ui/configGeneral.qml
+msgid "Show Power button"
+msgstr "Показывать кнопку (Выключить питание)"
+
+#: ../contents/ui/configApps.qml
+msgid "Choose application and hit plus:"
+msgstr "Выберите приложение и нажмите кнопку плюс:"
+
+#: ../contents/ui/main.qml
+msgid "Lock Screen"
+msgstr "Заблокировать"
+
+#: ../contents/ui/main.qml
+msgid "Log Out"
+msgstr "Выйти"
+
+#: ../contents/ui/main.qml
+msgid "Restart"
+msgstr "Перезагрузка"
+
+#: ../contents/ui/main.qml
+msgid "Sleep"
+msgstr "Сон"
+
+#: ../contents/ui/main.qml
+msgid "Shut Down"
+msgstr "Выключить питание"

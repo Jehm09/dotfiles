@@ -1,0 +1,114 @@
+# Files managed by the KDE profile.  Paths are relative to $HOME.
+#
+# `setup kde apply` copies repo -> $HOME, `setup kde save` copies $HOME -> repo.
+# Copy, not symlink: KConfig rewrites these files on every settings change and
+# on logout, using a write-temp-then-rename pattern that a symlink survives only
+# by luck. Entries missing on either side are skipped with a notice, so it is
+# safe to list a file before it exists.
+#
+# A trailing "/" means "the whole directory, recursively".
+#
+# Anything containing an absolute $HOME path is stored with a @HOME@ placeholder
+# and substituted on apply/save, so the repo stays portable across machines.
+
+# ── Shortcuts (the .desktop files carry X-KDE-Shortcuts defaults; overrides made
+#    in System Settings land in kglobalshortcutsrc and win over them) ──────────
+.config/kglobalshortcutsrc
+.local/share/applications/dots-arch-logo.desktop
+.local/share/applications/dots-browser.desktop
+.local/share/applications/dots-browser-incognito.desktop
+.local/share/applications/dots-code-editor.desktop
+.local/share/applications/dots-ocr.desktop
+.local/share/applications/dots-focus-down.desktop
+.local/share/applications/dots-focus-left.desktop
+.local/share/applications/dots-focus-right.desktop
+.local/share/applications/dots-focus-up.desktop
+.local/share/applications/dots-office.desktop
+# Creado desde Ajustes > Atajos como "atajo de comando": es lo que engancha la
+# tecla Meta a KRunner. X-KDE-GlobalAccel-CommandShortcut=true lo marca como tal.
+.local/share/applications/net.local.krunner.desktop
+.local/share/applications/dots-screenshot-save.desktop
+.local/share/applications/dots-settings.desktop
+.local/share/applications/dots-snip-to-search.desktop
+.local/share/applications/dots-task-manager.desktop
+.local/share/applications/dots-terminal.desktop
+.local/share/applications/dots-text-editor.desktop
+.local/share/applications/dots-volume-mixer.desktop
+
+# ── Brave: recuperar sesión tras el cierre brusco de la sesión de Plasma ────
+.config/brave-flags.conf
+
+# ── Utility scripts backing those shortcuts ─────────────────────────────────
+.config/kde/scripts/
+
+# ── Login check: warns when a compiled KWin effect stops loading ─────────────
+.config/autostart/kde-check-kwin-effects.desktop
+
+# ── Theme assets vendored from third parties (see dots/kde/VENDORED.md) ─────
+# Scratchy global theme (KDE Store p/1898344, GPL 3+). Vendored whole: 130 files,
+# 2.5 MB, no symlinks. A global theme in Plasma 6 is four separate packages —
+# look-and-feel, aurorae decoration, Plasma style and colour scheme — and all
+# four must be present or the theme applies half-broken.
+.local/share/plasma/look-and-feel/Scratchy/
+.local/share/aurorae/themes/Scratchy/
+.local/share/plasma/desktoptheme/Scratchy/
+.local/share/color-schemes/Scratchy.colors
+
+# scpmk power menu — vendored because it is PATCHED for Plasma 6.7, see VENDORED.md
+.local/share/plasma/plasmoids/org.kde.plasma.scpmk/
+
+# Thermal Monitor (store.kde.org/p/998915, upstream invent.kde.org/olib/thermalmonitor,
+# MIT, by Oliver Beard). Vendored at 0.2.8 — the AUR package sits at 0.2.7-2 and was
+# flagged out-of-date on 2026-07-20, so the Store copy is newer than the packaged one.
+.local/share/plasma/plasmoids/org.kde.olib.thermalmonitor/
+
+# Krohnkite tiling KWin script (0.9.9.2, MIT). Vendored because its AUR package
+# fails to build: the pinned sha256 of Codeberg's auto-generated tarball no longer
+# matches. Enabled via kwinrc [Plugins] krohnkiteEnabled=true.
+.local/share/kwin/scripts/krohnkite/
+
+# YAMIS icons (opendesktop p/2303161, GPL 3). 20 MB: 3960 files + 2070 symlinks.
+# Only vendorable because expand_entries matches -type l and the copy loop
+# recreates links instead of dereferencing them.
+.local/share/icons/YAMIS/
+
+# NOTE: Scratchy.colors above is listed by name, not as the whole color-schemes/
+# directory, because kde-material-you-colors also dumps generated MaterialYou*.colors
+# there and a directory entry would pull those into the repo on every `save`.
+
+# ── KWin: compositor, virtual desktops, tiling, window rules, Night Color ────
+.config/kwinrc
+.config/kwinrulesrc
+
+# ── Plasma shell ────────────────────────────────────────────────────────────
+# Two files are deliberately NOT managed here, both owned by plasmashell:
+#
+#   plasma-org.kde.plasma.desktop-appletsrc  the panel layout. plasmashell
+#     rewrites it live and generates the containment/applet IDs inside it. The
+#     panel is built by hand — see dots/kde/backup/README.md.
+#
+#   plasmashellrc  panel geometry keyed by those same generated IDs
+#     ([PlasmaViews][Panel 222]), plus [Updates] performed= — the list of Plasma
+#     migration scripts already run on THIS machine. Copying that to another
+#     machine would make Plasma skip migrations it never actually performed.
+.config/plasmarc
+
+# ── Applications and session services ───────────────────────────────────────
+.config/kdeglobals                  # theme, fonts, colors (also written by kde-material-you-colors)
+.config/klipperrc                   # clipboard history
+.config/spectaclerc                 # screenshots, recording, OCR languages
+.config/krunnerrc                   # launcher
+.config/kscreenlockerrc             # lock screen
+.config/powermanagementprofilesrc   # idle, DPMS, suspend  (replaces hypridle)
+.config/kactivitymanagerdrc
+.config/breezerc
+.config/dolphinrc
+.config/kcminputrc                  # cursor theme + size (NOT in kdeglobals)
+
+# ── Portals (Plasma session only) ───────────────────────────────────────────
+.config/xdg-desktop-portal/kde-portals.conf
+
+# ── Deliberately NOT managed ────────────────────────────────────────────────
+# .config/kwinoutputconfig.json  — per-machine monitor state, owned by KScreen
+# .config/kscreen/               — idem
+# .config/plasma-localerc        — set once by the initial setup wizard

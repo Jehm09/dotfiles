@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Terminal (dotfiles)
+Comment=Primer terminal disponible
+Exec=@HOME@/.config/kde/scripts/launch_first_available.sh "kitty -1" "foot" "alacritty" "wezterm" "konsole" "kgx" "uxterm" "xterm"
+Icon=utilities-terminal
+Terminal=false
+Categories=Utility;
+X-KDE-Shortcuts=Meta+Return,Meta+T,Ctrl+Alt+T

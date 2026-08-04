@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Navegador incognito (dotfiles)
+Comment=Navegador en modo privado
+Exec=@HOME@/.config/kde/scripts/launch_browser.sh --incognito
+Icon=view-private
+Terminal=false
+Categories=Utility;
+X-KDE-Shortcuts=Meta+Shift+W

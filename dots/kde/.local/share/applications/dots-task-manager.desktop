@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Monitor del sistema (dotfiles)
+Comment=btop, o el monitor grafico disponible
+Exec=@HOME@/.config/kde/scripts/launch_first_available.sh "command -v btop && kitty -1 fish -c btop" "gnome-system-monitor" "plasma-systemmonitor --page-name Processes"
+Icon=utilities-system-monitor
+Terminal=false
+Categories=Utility;
+X-KDE-Shortcuts=Ctrl+Shift+Escape

@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kcfg xmlns="http://www.kde.org/standards/kcfg/1.0"
+  xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+  xsi:schemaLocation="http://www.kde.org/standards/kcfg/1.0 http://www.kde.org/standards/kcfg/1.0/kcfg.xsd">
+  <kcfgfile name="" />
+
+  <group name="General">
+    <entry name="icon" type="String">
+      <default>configure</default>
+    </entry>
+    <entry name="showCmd1" type="bool">
+      <default>false</default>
+    </entry>
+    <entry name="showCmd2" type="bool">
+      <default>false</default>
+    </entry>
+    <entry name="showCmd3" type="bool">
+      <default>false</default>
+    </entry>
+  </group>
+  <group name="Apps">
+    <entry name="appList" type="String">
+      <default>[["systemsettings.desktop", { "iconName": "systemsettings" }]]</default>
+    </entry>
+  </group>
+
+</kcfg>

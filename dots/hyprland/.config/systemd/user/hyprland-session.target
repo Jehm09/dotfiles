@@ -1,0 +1,10 @@
+[Unit]
+Description=Hyprland session
+# BindsTo (a stronger form of Requires) pulls graphical-session.target up when
+# this target starts, satisfying the Requisite= of xdg-desktop-portal.service so
+# the portal can start. Same pattern as sway-session.target. Started from
+# Hyprland (hypr/hyprland/execs.lua).
+BindsTo=graphical-session.target
+Before=graphical-session.target
+Wants=graphical-session-pre.target
+After=graphical-session-pre.target

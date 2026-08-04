@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Comprobar efectos de KWin
+Comment=Avisa si un efecto compilado dejo de cargar tras un update de KWin
+Exec=@HOME@/.config/kde/scripts/check-kwin-effects.sh
+Icon=preferences-desktop-effects
+Terminal=false
+X-KDE-autostart-phase=2
+NoDisplay=true

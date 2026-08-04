@@ -1,0 +1,61 @@
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: Simple Customizable Power Menu for KDE\n"
+"Report-Msgid-Bugs-To: \n"
+"POT-Creation-Date: \n"
+"PO-Revision-Date: \n"
+"Last-Translator: \n"
+"Language: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+
+#: ../contents/config/config.qml
+msgid "General"
+msgstr ""
+
+#: ../contents/config/config.qml
+msgid "Apps"
+msgstr ""
+
+#: ../contents/ui/configGeneral.qml
+msgid "Widget Icon :"
+msgstr ""
+
+#: ../contents/ui/configGeneral.qml
+msgid "Show Lock / Log Out buttons"
+msgstr ""
+
+#: ../contents/ui/configGeneral.qml
+msgid "Show Restart / Sleep buttons"
+msgstr ""
+
+#: ../contents/ui/configGeneral.qml
+msgid "Show Power button"
+msgstr ""
+
+#: ../contents/ui/configApps.qml
+msgid "Choose application and hit plus:"
+msgstr ""
+
+#: ../contents/ui/main.qml
+msgid "Lock Screen"
+msgstr ""
+
+#: ../contents/ui/main.qml
+msgid "Log Out"
+msgstr ""
+
+#: ../contents/ui/main.qml
+msgid "Restart"
+msgstr ""
+
+#: ../contents/ui/main.qml
+msgid "Sleep"
+msgstr ""
+
+#: ../contents/ui/main.qml
+msgid "Shut Down"
+msgstr ""

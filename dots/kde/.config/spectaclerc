@@ -1,0 +1,17 @@
+[General]
+clipboardGroup=PostScreenshotCopyImage
+closeAfterOcr=true
+ocrLanguages=eng,spa
+quitAfterSaveCopyExport=true
+useReleaseToCapture=true
+
+[ImageSave]
+lastImageSaveLocation=file:///tmp/ocr-QXIJB0.png
+translatedScreenshotsFolder=Screenshots
+
+[VideoSave]
+translatedScreencastsFolder=Screencasts
+
+[ViewerWindow]
+2 screens: Height=771
+2 screens: Width=978

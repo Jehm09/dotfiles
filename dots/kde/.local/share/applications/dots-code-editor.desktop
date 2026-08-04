@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Editor de codigo (dotfiles)
+Comment=Primer editor de codigo disponible
+Exec=@HOME@/.config/kde/scripts/launch_first_available.sh "windsurf" "antigravity" "code" "codium" "cursor" "zed" "zedit" "zeditor" "kate" "gnome-text-editor" "emacs" "command -v nvim && kitty -1 nvim" "command -v micro && kitty -1 micro"
+Icon=text-editor
+Terminal=false
+Categories=Utility;
+X-KDE-Shortcuts=Meta+C

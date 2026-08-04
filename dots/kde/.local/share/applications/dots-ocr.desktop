@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=OCR: texto a portapapeles
+Comment=Selecciona una region y copia su texto (Spectacle + Tesseract)
+Exec=@HOME@/.config/kde/scripts/ocr.sh
+Icon=edit-select-text
+Terminal=false
+Categories=Utility;
+X-KDE-Shortcuts=Meta+Shift+X,Meta+Shift+T

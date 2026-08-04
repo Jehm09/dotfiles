@@ -1,0 +1,12 @@
+[265a8781-9d10-4660-aad8-a33d6dbd1c7f]
+Description=New window settings
+Enabled=false
+opacityactive=85
+opacityactiverule=2
+opacityinactive=75
+opacityinactiverule=2
+wmclassmatch=1
+
+[General]
+count=1
+rules=265a8781-9d10-4660-aad8-a33d6dbd1c7f

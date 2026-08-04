@@ -1,0 +1,101 @@
+// Foco direccional con semántica de Hyprland. Plantilla: @DIR@ -> left|right|up|down
+//
+// MODELO: el origen es la POSICIÓN DEL CURSOR, no la ventana activa.
+//
+// Anclar en workspace.activeWindow estaba mal: si estás en un monitor vacío no hay
+// ventana activa ahí (o la activa está en el otro monitor), así que el origen de la
+// búsqueda era incorrecto y no se podía volver ni moverse entre monitores vacíos.
+// El cursor siempre existe y, con FocusFollowsMouse, es donde estás de verdad.
+//
+// Con ese origen los cuatro casos salen de la misma lógica:
+//   - dos monitores vacíos            -> no hay ventanas, se salta de pantalla
+//   - uno con apps y otro vacío       -> ventanas mientras haya, luego la pantalla,
+//                                        y desde la vacía se vuelve a las ventanas
+//   - ambos con apps                  -> la ventana más cercana, cruzando monitores
+//   - borde exterior                  -> no se hace nada, nunca circular
+//
+// Las pantallas se tratan como un único plano continuo.
+
+var DIR = "@DIR@";
+
+var cur = workspace.cursorPos;
+var ox = cur.x;
+var oy = cur.y;
+
+var deskId = workspace.currentDesktop ? String(workspace.currentDesktop.id) : "";
+
+function eligible(w) {
+    if (!w) return false;
+    if (w.minimized || !w.normalWindow) return false;
+    if (w.skipTaskbar || w.skipSwitcher || w.hidden) return false;
+    if (w.desktops && w.desktops.length > 0 && deskId !== "") {
+        var here = false;
+        for (var i = 0; i < w.desktops.length; i++) {
+            if (String(w.desktops[i].id) === deskId) { here = true; break; }
+        }
+        if (!here) return false;
+    }
+    return true;
+}
+
+// Distancia "hacia DIR" y desviación perpendicular respecto al origen.
+function metrics(g) {
+    var cx = g.x + g.width / 2;
+    var cy = g.y + g.height / 2;
+    var along, perp, overlap;
+    if (DIR === "left" || DIR === "right") {
+        along   = (DIR === "right") ? (cx - ox) : (ox - cx);
+        perp    = Math.abs(cy - oy);
+        overlap = (g.y <= oy) && (oy < g.y + g.height);
+    } else {
+        along   = (DIR === "down") ? (cy - oy) : (oy - cy);
+        perp    = Math.abs(cx - ox);
+        overlap = (g.x <= ox) && (ox < g.x + g.width);
+    }
+    return { along: along, perp: perp, overlap: overlap };
+}
+
+var best = null, bestScore = Infinity;
+var all = workspace.windowList();
+
+for (var i = 0; i < all.length; i++) {
+    var w = all[i];
+    if (!eligible(w)) continue;
+
+    var g = w.frameGeometry;
+    // Saltar la ventana bajo el cursor: es el origen, no un destino.
+    if (ox >= g.x && ox < g.x + g.width && oy >= g.y && oy < g.y + g.height) continue;
+
+    var m = metrics(g);
+    if (m.along <= 0) continue;
+
+    var score = m.along + m.perp * 0.5 + (m.overlap ? 0 : 100000);
+    if (score < bestScore) { bestScore = score; best = w; }
+}
+
+if (best) {
+    workspace.activeWindow = best;
+    var bg = best.frameGeometry;
+    print("FOCUSDIR OK " + Math.round(bg.x + bg.width / 2) + " " + Math.round(bg.y + bg.height / 2));
+} else {
+    // Sin ventana en esa dirección: ¿hay una PANTALLA? Sirve para pasar a un monitor
+    // vacío, y también para moverse entre dos monitores vacíos.
+    var screens = workspace.screens;
+    var target = null, tScore = Infinity;
+    for (var s = 0; s < screens.length; s++) {
+        var sg = screens[s].geometry;
+        // Saltar la pantalla donde está el cursor.
+        if (ox >= sg.x && ox < sg.x + sg.width && oy >= sg.y && oy < sg.y + sg.height) continue;
+
+        var sm = metrics(sg);
+        if (sm.along <= 0) continue;
+        if (sm.along < tScore) { tScore = sm.along; target = sg; }
+    }
+
+    if (target) {
+        print("FOCUSDIR OK " + Math.round(target.x + target.width / 2) + " " +
+                               Math.round(target.y + target.height / 2));
+    } else {
+        print("FOCUSDIR NONE");
+    }
+}

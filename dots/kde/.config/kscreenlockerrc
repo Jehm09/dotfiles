@@ -1,0 +1,6 @@
+[Daemon]
+Timeout=15
+
+[Greeter][Wallpaper][org.kde.image][General]
+Image=file://@HOME@/Pictures/Imagenes Kurzgesagt/080_Website-Project-Black-Holes_Kurzgesagt-Header_upscayl_2x_upscayl-lite-4x.png
+PreviewImage=file://@HOME@/Pictures/Imagenes Kurzgesagt/080_Website-Project-Black-Holes_Kurzgesagt-Header_upscayl_2x_upscayl-lite-4x.png

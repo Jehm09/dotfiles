@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Editor de texto (dotfiles)
+Comment=Primer editor de texto disponible
+Exec=@HOME@/.config/kde/scripts/launch_first_available.sh "kate" "gnome-text-editor" "emacs"
+Icon=accessories-text-editor
+Terminal=false
+Categories=Utility;
+X-KDE-Shortcuts=Meta+X

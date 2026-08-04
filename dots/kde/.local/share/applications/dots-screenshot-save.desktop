@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Captura: guardar y copiar
+Comment=Region al portapapeles y a ~/Pictures/Screenshots
+Exec=@HOME@/.config/kde/scripts/screenshot-save.sh
+Icon=camera-photo
+Terminal=false
+Categories=Utility;
+X-KDE-Shortcuts=Ctrl+Print

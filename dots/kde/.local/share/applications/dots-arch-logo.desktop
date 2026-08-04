@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Arch
+Comment=Decorative Arch logo for the panel — intentionally does nothing when clicked
+Icon=/usr/share/pixmaps/archlinux-logo.svg
+Exec=true
+Terminal=false
+NoDisplay=true

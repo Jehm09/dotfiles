@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Navegador (dotfiles)
+Comment=Primer navegador disponible segun launch_browser.sh
+Exec=@HOME@/.config/kde/scripts/launch_browser.sh
+Icon=web-browser
+Terminal=false
+Categories=Utility;
+X-KDE-Shortcuts=Meta+W

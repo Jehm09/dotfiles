@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Ajustes del sistema (dotfiles)
+Comment=Ajustes de Plasma
+Exec=systemsettings
+Icon=preferences-system
+Terminal=false
+Categories=Utility;
+X-KDE-Shortcuts=Meta+I

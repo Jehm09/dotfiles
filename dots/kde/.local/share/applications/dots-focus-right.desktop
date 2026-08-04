@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Foco Right (con cursor)
+Comment=Mueve el foco y lleva el puntero a la ventana, como Hyprland
+Exec=@HOME@/.config/kde/scripts/focus-warp.sh right
+Icon=go-right
+Terminal=false
+Categories=Utility;
+X-KDE-Shortcuts=Meta+Right
+StartupNotify=false
+X-KDE-StartupNotify=false

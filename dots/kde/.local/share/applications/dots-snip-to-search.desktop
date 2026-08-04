@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Buscar imagen en Google Lens
+Comment=Sube una region y la busca en Google Lens
+Exec=@HOME@/.config/kde/scripts/snip-to-search.sh
+Icon=edit-image-face-show
+Terminal=false
+Categories=Utility;
+X-KDE-Shortcuts=Meta+Shift+A

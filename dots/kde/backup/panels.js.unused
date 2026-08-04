@@ -1,0 +1,180 @@
+// Panel layout for the mini-rice, driven through Plasma's scripting API.
+//
+// Run with:  setup kde panels
+// (i.e. qdbus org.kde.plasmashell /PlasmaShell org.kde.PlasmaShell.evaluateScript)
+//
+// Why scripting instead of writing plasma-org.kde.plasma.desktop-appletsrc by
+// hand: plasmashell owns that file, rewrites it live, and its containment/applet
+// IDs are generated. Editing it while plasmashell runs loses the changes on
+// logout. The scripting API is the supported path and is idempotent enough to
+// re-run.
+//
+// Target layout, from the reference screenshot:
+//   - top:    full width, thin, transparent. Arch launcher | clock centred | media, volume, tray
+//   - bottom: floating dock, centred, fits its contents, icons only
+
+// ── Reset: drop every existing panel so re-running is deterministic ──────────
+// slice(0) first: panelIds is live and shrinks as panels are removed, so
+// iterating it directly skips entries and leaves orphan panels behind.
+var existing = panelIds.slice(0);
+for (var i = 0; i < existing.length; i++) {
+    panelById(existing[i]).remove();
+}
+
+// ── Top bar ─────────────────────────────────────────────────────────────────
+var top = new Panel("org.kde.panel");
+top.location = "top";
+top.height = 26;          // very thin, as in the reference; raise if unreadable
+top.floating = false;     // flush against the screen edge
+top.lengthMode = "fill";  // edge to edge
+top.hiding = "none";
+// "opaque" = solid panel background from the Plasma Style, which with the dark
+// WhiteSurMono scheme reads a shade darker than the wallpaper behind it.
+// ("adaptive" would keep it transparent until a window touches the panel.)
+top.opacity = "opaque";
+
+// Fixed padding so the first and last icons are not glued to the screen edges.
+// panelspacer only has `expanding` and `length`; a non-expanding spacer with a
+// length is the only way to get edge padding in a Plasma panel.
+function pad(p, px) {
+    var s = p.addWidget("org.kde.plasma.panelspacer");
+    s.currentConfigGroup = ["General"];
+    s.writeConfig("expanding", false);
+    s.writeConfig("length", px);
+    return s;
+}
+
+pad(top, 10);
+
+var launcher = top.addWidget("org.kde.plasma.kickoff");
+launcher.currentConfigGroup = ["General"];
+launcher.writeConfig("icon", "/usr/share/pixmaps/archlinux-logo.svg");
+launcher.writeConfig("favoritesPortedToKAstats", true);
+
+// Kara: minimal dot-style virtual desktop pager (github.com/dhruv8sh/kara).
+// Note the plugin id has no "org.kde.plasma." prefix — third-party plasmoids use
+// their own namespace, and addWidget() with a wrong id does NOT fail: it creates
+// a broken placeholder silently. Always take the id from the installed package.
+//
+// type 1 is the pill mode, and the t1* keys are its geometry: inactive desktops
+// are t1width x t1height with t1radius corners (equal width/height + half radius
+// = a circle), the active one stretches to t1activeWidth. That is the "o —— o"
+// look. Set explicitly rather than left on defaults, whose 10/40 px are sized for
+// a taller panel than this 26 px one.
+// Kara's config is split across LOWERCASE groups, not the usual "General":
+//   general    -> type, highlightType, wrapOn, spacing
+//   type1      -> t1width, t1height, t1radius, t1activeWidth, t1activeHeight
+//   appearance -> showOnlyActive
+// Writing them all to "General" silently does nothing. Group names come from
+// contents/config/main.xml in the installed plasmoid.
+var kara = top.addWidget("org.dhruv8sh.kara");
+
+kara.currentConfigGroup = ["general"];
+kara.writeConfig("type", 1);          // 1 = pill/dot mode
+kara.writeConfig("spacing", 5);
+kara.writeConfig("wrapOn", true);
+
+kara.currentConfigGroup = ["type1"];
+kara.writeConfig("t1width", 8);       // inactive: 8x8 with radius 4 = a circle
+kara.writeConfig("t1height", 8);
+kara.writeConfig("t1radius", 4);
+kara.writeConfig("t1activeWidth", 26);  // active stretches into a pill
+kara.writeConfig("t1activeHeight", 8);
+
+kara.currentConfigGroup = ["appearance"];
+kara.writeConfig("showOnlyActive", false);
+
+// Global Menu is native.
+top.addWidget("org.kde.plasma.appmenu");
+
+top.addWidget("org.kde.plasma.panelspacer").writeConfig("expanding", true);
+
+// ── Centre: the now-playing widget, as in the reference bar ──────────────────
+// Plasmusic Toolbar (github.com/ccatterina/plasmusic-toolbar): album art plus
+// scrolling title, sitting between the two expanding spacers so it stays centred.
+top.addWidget("plasmusic-toolbar");
+
+top.addWidget("org.kde.plasma.panelspacer").writeConfig("expanding", true);
+
+// ── Right side: tray apps, sound, bluetooth, network, settings, clock ────────
+//    The clock goes LAST, hard against the right edge, as in the reference bar.
+//    Sound/bluetooth/network are discrete applets rather than tray entries so
+//    their order is fixed and they never hide behind the chevron.
+//
+// The tray holds third-party StatusNotifierItems — Steam, Discord and friends —
+// and gets the expand arrow for whatever is not pinned to always-visible.
+//
+// extraItems is emptied on purpose: by default Plasma embeds its own volume /
+// bluetooth / network plasmoids inside the tray, which would duplicate the
+// discrete applets added right below.
+//
+// There is NO "show only the first N icons" setting in Plasma 6 (verified
+// against the compiled applet: only shownItems / hiddenItems / showAllItems
+// exist). With both lists left empty, Plasma falls back to its Active/Passive
+// heuristic — active icons visible, the rest behind the arrow — which is the
+// closest thing to the Windows taskbar behaviour. To force a specific icon to
+// be always visible, right-click the tray → Configure → set it to "Shown".
+var tray = top.addWidget("org.kde.plasma.systemtray");
+tray.currentConfigGroup = ["General"];
+tray.writeConfig("extraItems", "");
+tray.writeConfig("showAllItems", false);
+tray.writeConfig("scaleIconsToFit", true);
+
+top.addWidget("org.kde.plasma.volume");
+top.addWidget("org.kde.plasma.bluetooth");
+top.addWidget("org.kde.plasma.networkmanagement");
+
+// quicklaunch resolves entries with KDesktopFile + KIO::OpenUrlJob, so it needs
+// a real file URL. The "applications:foo.desktop" scheme is a task-manager
+// thing and silently does nothing here.
+var settings = top.addWidget("org.kde.plasma.quicklaunch");
+settings.currentConfigGroup = ["General"];
+settings.writeConfig("launcherUrls", "file:///usr/share/applications/systemsettings.desktop");
+settings.writeConfig("showLauncherNames", false);
+settings.writeConfig("maxSectionCount", 1);
+// NOTE: quicklaunch has no icon-size option (its config is only enablePopup,
+// launcherUrls, maxSectionCount, popupUrls, showLauncherNames, title), so its
+// icon renders smaller than the neighbouring applets and there is no native fix.
+
+// Clock last, hard right — the reference bar puts the time at the very edge.
+var clock = top.addWidget("org.kde.plasma.digitalclock");
+clock.currentConfigGroup = ["Appearance"];
+clock.writeConfig("showDate", false);      // time only, as in the reference
+clock.writeConfig("use24hFormat", 2);      // 2 = force 24h ("01:30")
+clock.writeConfig("showSeconds", "Never");
+
+pad(top, 10);
+
+// Panel Colorizer (github.com/luisbocanegra/plasma-panel-colorizer) restyles the
+// panel and the other widgets in it — this is what produces the transparent /
+// black bar, not a global theme. It has no visible UI of its own, so position is
+// irrelevant; it goes last so it never shifts the icons around.
+//
+// Its own settings are extensive and GUI-driven, and they live in the applet's
+// Configuration group inside plasma-org.kde.plasma.desktop-appletsrc — which this
+// profile does NOT track, and which `setup kde panels` wipes when it recreates
+// the panels. Configure it in its GUI, then export a preset from its settings and
+// vendor that file if you want the look pinned in the repo.
+top.addWidget("luisbocanegra.panel.colorizer");
+
+// ── Bottom dock ─────────────────────────────────────────────────────────────
+var dock = new Panel("org.kde.panel");
+dock.location = "bottom";
+dock.height = 48;
+dock.floating = true;
+dock.lengthMode = "fit";   // shrink to the icons, macOS-dock style
+dock.alignment = "center";
+dock.hiding = "none";
+dock.opacity = "translucent";
+
+var tasks = dock.addWidget("org.kde.plasma.icontasks");
+tasks.currentConfigGroup = ["General"];
+tasks.writeConfig("launchers", [
+    "applications:brave-browser.desktop",
+    "applications:org.kde.dolphin.desktop",
+    "applications:kitty.desktop",
+    "applications:code.desktop",
+    "applications:systemsettings.desktop"
+].join(","));
+
+print("panels rebuilt: top=" + top.id + " dock=" + dock.id);

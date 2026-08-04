@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Mezclador de volumen (dotfiles)
+Comment=Control de volumen por aplicacion
+Exec=@HOME@/.config/kde/scripts/launch_first_available.sh "pavucontrol-qt" "pavucontrol"
+Icon=audio-volume-high
+Terminal=false
+Categories=Utility;
+X-KDE-Shortcuts=Ctrl+Meta+V
