@@ -1,13 +1,30 @@
 #!/usr/bin/env bash
 # Post-install setup — run after first boot into the new Arch system.
-# Handles everything archinstall cannot: multilib, AUR helper, AUR packages,
-# greeter (greetd + sysc-greet-hyprland), pacman hooks, dotfiles, and default shell.
+# Handles everything archinstall cannot.
+#
+# Steps, in order:
+#   1   Multilib          enable the [multilib] repo (Steam, 32-bit apps)
+#   2   AUR helper        install paru (or yay)
+#   3   Desktop packages  deps-hyprland+deps-quickshell, or deps-kde
+#   3b  Plasma session    KWallet PAM hook + apply the copy-managed dots/kde   [kde]
+#   3c  Quickshell        pinned quickshell build + Python venv          [hyprland]
+#   4   Apps              everything in apps.conf (official + AUR)
+#   5   Display manager   SDDM + sddm-astronaut-theme (hyprland_kath variant)
+#   6   Pacman hooks      install packages/hooks/enabled/ to /etc/pacman.d/hooks
+#   7   Dotfiles          symlink ~/.config for the chosen desktop
+#   8   Shell             set fish as the login shell
+#   9   Hardware fixes    Logitech mouse module blacklist + initramfs rebuild
+#
+# Steps 3b and 3c are mutually exclusive: they follow the desktop choice, which
+# is required and has no default.
 #
 # Usage:
-#   setup post              Interactive component selection (default)
-#   setup post --all        Run everything without prompting
-#   setup post --dotfiles   Only link dotfiles
-#   setup post --aur        Only install AUR helper + AUR packages
+#   setup post --hyprland        Interactive component selection
+#   setup post --all --hyprland  Run everything without prompting
+#   setup post --dotfiles        Only link dotfiles
+#   setup post --pkgs            Only AUR helper + all packages
+#   setup post --desktop-only    Only the chosen desktop's packages + config
+#   setup post --help            Full flag reference
 
 set -Eeuo pipefail
 
@@ -95,6 +112,13 @@ Interactive mode (default, no flags):
 EOF
             exit 0
             ;;
+        *)
+            # Without this a typo like --hyprlnad would be ignored silently and
+            # the run would stop later with a confusing "no desktop chosen".
+            error "Unknown option: $arg"
+            error "See: setup post --help"
+            exit 1
+            ;;
     esac
 done
 
@@ -123,7 +147,7 @@ _print_menu() {
         "$([[ $_do_desktop       == true ]] && echo "x" || echo " ")"
     printf "    [%s] 4  Apps                 (packages/apps.conf — official + AUR)\n" \
         "$([[ $_do_apps          == true ]] && echo "x" || echo " ")"
-    printf "    [%s] 5  Greeter              (greetd + sysc-greet-hyprland + seatd)\n" \
+    printf "    [%s] 5  Display manager     (SDDM + tema astronaut)\n" \
         "$([[ $_do_greeter       == true ]] && echo "x" || echo " ")"
     printf "    [%s] 6  Pacman hooks         (packages/hooks/enabled/)\n" \
         "$([[ $_do_hooks         == true ]] && echo "x" || echo " ")"
@@ -246,35 +270,6 @@ if [[ $_do_desktop == true ]]; then
 fi
 
 # ------------------------------------------------------------------
-# 3c. Hyprland-specific: pinned quickshell + Python venv
-# ------------------------------------------------------------------
-if [[ $_do_desktop == true && "$_desktop" == "hyprland" ]]; then
-    step "Quickshell runtime"
-
-    # quickshell comes from the commit end-4 pins, not from the AUR's
-    # quickshell-git — see the note at the top of packages/deps-quickshell.conf.
-    # This needs the upstream clone, so make sure it exists first.
-    if [[ ! -d "${XDG_DATA_HOME:-$HOME/.local/share}/dotfiles/upstream" ]]; then
-        bash "$REPO_ROOT/cmd/lib/upstream.sh" sync
-    fi
-    bash "$REPO_ROOT/cmd/lib/upstream.sh" deps
-
-    step "Python virtualenv for shell scripts"
-
-    # hypr/hyprland/env.lua exports this path as ILLOGICAL_IMPULSE_VIRTUAL_ENV.
-    # Wallpaper colour extraction, thumbnails and region detection all shell out
-    # to it, and fail quietly when it is missing.
-    _venv="$HOME/.local/state/quickshell/.venv"
-    if ! command -v uv &>/dev/null; then
-        warn "uv not installed — skipping the venv (colour and thumbnail scripts will fail)"
-    else
-        [[ -d "$_venv" ]] || uv venv "$_venv"
-        uv pip install --python "$_venv/bin/python" -r "$REPO_ROOT/packages/requirements.txt"
-        success "venv ready at $_venv"
-    fi
-fi
-
-# ------------------------------------------------------------------
 # 3b. Plasma-specific session setup
 #     Runs only when KDE is the chosen desktop: the wallet PAM hook and the
 #     copy-managed dots/kde profile, which symlink.sh deliberately does not touch.
@@ -293,21 +288,28 @@ if [[ $_do_desktop == true && "$_desktop" == "kde" ]]; then
     # If the wallet was created with a different one, change it in
     # KWalletManager -> Change Password.
     #
-    # force_run is REQUIRED with greetd. Without it the module logs
+    # This edits the display manager's own PAM stack, so it has to follow whichever
+    # one is in use. SDDM is the current greeter; /etc/pam.d/greetd is still
+    # handled in case greetd is ever re-enabled as the fallback.
+    #
+    # force_run was REQUIRED with greetd: without it the module logged
     #   "pam_kwallet5: not a graphical session, skipping"
-    # and never creates /run/user/<uid>/kwallet5.socket, so kwalletd6 ends up
-    # being DBus-activated later without the key and prompts for the password.
-    # greetd's PAM session is not flagged graphical at the point the module runs.
-    _pam_greetd="/etc/pam.d/greetd"
-    if [[ -f "$_pam_greetd" ]] && ! grep -q 'pam_kwallet5' "$_pam_greetd"; then
-        info "Enabling KWallet auto-unlock (pam_kwallet5)..."
-        sudo sed -i '/^auth.*pam_gnome_keyring\.so/a auth       optional     pam_kwallet5.so' "$_pam_greetd"
-        sudo sed -i '/^session.*pam_gnome_keyring\.so/a session    optional     pam_kwallet5.so auto_start force_run' "$_pam_greetd"
-        success "pam_kwallet5 added to $_pam_greetd"
-    elif [[ -f "$_pam_greetd" ]] && grep -q 'pam_kwallet5.so auto_start$' "$_pam_greetd"; then
-        info "Adding force_run to the existing pam_kwallet5 session line..."
-        sudo sed -i 's|^\(session.*pam_kwallet5\.so auto_start\)$|\1 force_run|' "$_pam_greetd"
-    fi
+    # and never created /run/user/<uid>/kwallet5.socket, so kwalletd6 got
+    # DBus-activated later without the key and prompted for the password. SDDM
+    # does flag its session graphical, but force_run is harmless there and keeps
+    # both stacks identical.
+    for _pam_dm in /etc/pam.d/sddm /etc/pam.d/greetd; do
+        [[ -f "$_pam_dm" ]] || continue
+        if ! grep -q 'pam_kwallet5' "$_pam_dm"; then
+            info "Enabling KWallet auto-unlock (pam_kwallet5) in $_pam_dm..."
+            sudo sed -i '/^auth.*pam_gnome_keyring\.so/a auth       optional     pam_kwallet5.so' "$_pam_dm"
+            sudo sed -i '/^session.*pam_gnome_keyring\.so/a session    optional     pam_kwallet5.so auto_start force_run' "$_pam_dm"
+            success "pam_kwallet5 added to $_pam_dm"
+        elif grep -q 'pam_kwallet5.so auto_start$' "$_pam_dm"; then
+            info "Adding force_run to the existing pam_kwallet5 session line in $_pam_dm..."
+            sudo sed -i 's|^\(session.*pam_kwallet5\.so auto_start\)$|\1 force_run|' "$_pam_dm"
+        fi
+    done
 
     info "Applying the KDE profile (dots/kde -> ~)..."
     bash "$REPO_ROOT/cmd/lib/kde.sh" apply
@@ -316,6 +318,38 @@ if [[ $_do_desktop == true && "$_desktop" == "kde" ]]; then
     command -v kbuildsycoca6 &>/dev/null && kbuildsycoca6 --noincremental &>/dev/null || true
 
     success "KDE configured — pick 'Plasma (Wayland)' at the login screen"
+fi
+
+# ------------------------------------------------------------------
+# 3c. Hyprland-specific: pinned quickshell + Python venv
+#     Runs only when Hyprland is the chosen desktop. Both pieces are things the
+#     plain package lists cannot express.
+# ------------------------------------------------------------------
+if [[ $_do_desktop == true && "$_desktop" == "hyprland" ]]; then
+    step "Quickshell runtime (pinned build)"
+
+    # quickshell is built from the commit end-4 pins, not from the AUR's
+    # quickshell-git, which tracks master and breaks the shell on a bad day.
+    # See the note at the top of packages/deps-quickshell.conf.
+    # The PKGBUILD lives in the upstream clone, so ensure that exists first.
+    if [[ ! -d "${XDG_DATA_HOME:-$HOME/.local/share}/dotfiles/upstream" ]]; then
+        bash "$REPO_ROOT/cmd/lib/upstream.sh" sync
+    fi
+    bash "$REPO_ROOT/cmd/lib/upstream.sh" deps
+
+    step "Python virtualenv for the shell's helper scripts"
+
+    # hypr/hyprland/env.lua exports this path as ILLOGICAL_IMPULSE_VIRTUAL_ENV.
+    # Wallpaper colour extraction, thumbnail generation and region detection all
+    # shell out to it, and fail quietly when it is missing.
+    _venv="$HOME/.local/state/quickshell/.venv"
+    if ! command -v uv &>/dev/null; then
+        warn "uv not installed — skipping the venv (colour and thumbnail scripts will fail)"
+    else
+        [[ -d "$_venv" ]] || uv venv "$_venv"
+        uv pip install --python "$_venv/bin/python" -r "$REPO_ROOT/packages/requirements.txt"
+        success "venv ready at $_venv"
+    fi
 fi
 
 # ------------------------------------------------------------------
@@ -340,54 +374,84 @@ if [[ $_do_apps == true ]]; then
 fi
 
 # ------------------------------------------------------------------
-# 5. Greeter (greetd + sysc-greet-hyprland + seatd)
+# 5. Display manager (SDDM + sddm-astronaut-theme)
 # ------------------------------------------------------------------
 if [[ $_do_greeter == true ]]; then
-    step "Greeter (greetd + sysc-greet-hyprland)"
+    step "Display manager (SDDM + astronaut theme)"
 
-    # greetd desde repos oficiales
-    sudo pacman -S --needed --noconfirm greetd
-
-    # sysc-greet-hyprland desde AUR
-    _helper=""
-    for h in paru yay; do command -v "$h" &>/dev/null && { _helper="$h"; break; }; done
+    _helper="$(_find_aur_helper)"
     if [[ -z "$_helper" ]]; then
-        warn "No AUR helper found — skipping sysc-greet-hyprland (enable step 2 first)"
+        warn "No AUR helper found — skipping the display manager (run step 2 first)"
     else
-        "$_helper" -S --needed --noconfirm sysc-greet-hyprland
+        mapfile -t _greeter_pkgs < <(parse_packages "$REPO_ROOT/packages/deps-greeter.conf")
+        info "Installing ${#_greeter_pkgs[@]} display manager packages..."
+        "$_helper" -S --needed --noconfirm "${_greeter_pkgs[@]}"
+
+        # Theme variant and screen size.
+        #
+        # Both live in files the sddm-astronaut-theme package owns, so an upgrade
+        # resets them. packages/hooks/enabled/sddm-astronaut-theme.hook re-applies
+        # exactly these two edits afterwards — keep the values in sync.
+        _theme_dir="/usr/share/sddm/themes/sddm-astronaut-theme"
+        if [[ -d "$_theme_dir" ]]; then
+            info "Selecting the hyprland_kath variant..."
+            sudo sed -i 's|^ConfigFile=.*|ConfigFile=Themes/hyprland_kath.conf|' \
+                "$_theme_dir/metadata.desktop"
+            sudo sed -i -e 's|^ScreenWidth=.*|ScreenWidth="2560"|' \
+                        -e 's|^ScreenHeight=.*|ScreenHeight="1440"|' \
+                "$_theme_dir/Themes/hyprland_kath.conf"
+        else
+            warn "Theme not found at $_theme_dir — skipping the variant selection"
+        fi
+
+        info "Configuring SDDM..."
+        sudo mkdir -p /etc/sddm.conf.d
+
+        # .conf.d drop-ins rather than /etc/sddm.conf: the latter is a pacman
+        # .pacnew magnet, and drop-ins keep our settings separate from defaults.
+        sudo tee /etc/sddm.conf.d/10-theme.conf > /dev/null <<'CONF'
+# Managed by setup post. See packages/deps-greeter.conf.
+[Theme]
+Current=sddm-astronaut-theme
+CONF
+
+        # The theme's login field expects the Qt virtual keyboard to be available.
+        sudo tee /etc/sddm.conf.d/20-virtualkbd.conf > /dev/null <<'CONF'
+# Managed by setup post.
+[General]
+InputMethod=qtvirtualkeyboard
+CONF
+
+        # Wayland greeter: this box runs Hyprland and Plasma Wayland, and the X11
+        # greeter would pull in a whole Xorg session just to draw the login form.
+        sudo tee /etc/sddm.conf.d/30-wayland.conf > /dev/null <<'CONF'
+# Managed by setup post.
+[General]
+DisplayServer=wayland
+GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell
+CONF
+
+        # greetd was the previous display manager. Only one may be enabled: the
+        # display-manager.service symlink points at whichever won.
+        if systemctl is-enabled greetd &>/dev/null; then
+            info "Disabling greetd (kept installed as a fallback)..."
+            sudo systemctl disable greetd
+        fi
+        sudo systemctl enable sddm
+
+        success "SDDM enabled — greetd left installed but disabled"
     fi
 
-    # Deshabilitar sddm si está activo (instalado por archinstall)
-    if systemctl is-enabled sddm &>/dev/null 2>&1; then
-        info "Disabling sddm..."
-        sudo systemctl disable sddm
-    fi
-
-    info "Enabling seatd..."
-    sudo systemctl enable --now seatd
-    sudo usermod -aG seat "$USER"
-
-    info "Configuring greetd..."
-    sudo mkdir -p /etc/greetd
-    sudo tee /etc/greetd/config.toml > /dev/null <<'TOML'
-[terminal]
-vt = 1
-
-[default_session]
-# sysc-greet-hyprland: graphical console greeter for greetd, Hyprland variant.
-# Source: https://github.com/b1rger/sysc-greet
-command = "sysc-greet-hyprland"
-user = "greeter"
-TOML
-    sudo systemctl enable greetd
-
-    # gnome-keyring PAM integration (auto-unlock on login)
-    _pam_login="/etc/pam.d/login"
-    if [[ -f "$_pam_login" ]] && ! grep -q 'pam_gnome_keyring' "$_pam_login"; then
-        info "Configuring gnome-keyring PAM integration..."
-        sudo sed -i '/^auth.*pam_unix\.so/a auth       optional     pam_gnome_keyring.so' "$_pam_login"
-        sudo sed -i '/^session.*pam_unix\.so/a session    optional     pam_gnome_keyring.so auto_start' "$_pam_login"
-    fi
+    # gnome-keyring PAM integration (auto-unlock on login).
+    # /etc/pam.d/login covers TTY logins; /etc/pam.d/sddm covers the graphical
+    # one and is a separate stack, so both need the module.
+    for _pam in /etc/pam.d/login /etc/pam.d/sddm; do
+        if [[ -f "$_pam" ]] && ! grep -q 'pam_gnome_keyring' "$_pam"; then
+            info "Configuring gnome-keyring PAM integration in $_pam..."
+            sudo sed -i '/^auth.*pam_unix\.so/a auth       optional     pam_gnome_keyring.so' "$_pam"
+            sudo sed -i '/^session.*pam_unix\.so/a session    optional     pam_gnome_keyring.so auto_start' "$_pam"
+        fi
+    done
 
     # NVIDIA Wayland environment variables
     if lspci 2>/dev/null | grep -qi nvidia; then

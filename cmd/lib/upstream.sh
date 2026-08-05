@@ -20,13 +20,22 @@
 # Because `mine` descends from a real upstream commit, `update` is a genuine
 # three-way merge: conflicts can only appear in files we actually patched.
 #
+# Two commands change the system, and they are separate on purpose:
+#
+#   update   rewrites files in the clone. No root, instant, always safe to abort.
+#   deps     rebuilds quickshell from the commit upstream pins. Needs sudo and
+#            several minutes of Qt compilation.
+#
+# They are still linked: pulling new upstream code can move that pin, so `update`
+# and `status` both report when `deps` has to run again.
+#
 # Usage:
 #   setup upstream sync              Clone/checkout and rebuild `mine` from the overlay
 #   setup upstream apply             Rebuild `mine` only (after editing patches by hand)
 #   setup upstream update [--to REF] Fetch and merge upstream into `mine`
 #   setup upstream export            Regenerate the overlay from `mine`
 #   setup upstream deps              Build quickshell at the commit upstream pins
-#   setup upstream status            Show lock, drift and pending changes
+#   setup upstream status            Show lock, drift, pending changes and runtime pin
 
 set -Eeuo pipefail
 
@@ -126,6 +135,40 @@ _require_clone() {
 # alone is wrong whenever --to named something else: the export would then
 # anchor to the old base and bake upstream's own changes into our patches.
 _ANCHOR_FILE_REL=".git/dotfiles-upstream-anchor"
+
+# Records which quickshell commit the installed package was built from. The
+# PKGBUILD's pkgver is a fixed placeholder upstream never bumps, so pacman cannot
+# answer this and there is nothing else to compare against.
+_PIN_FILE_REL=".git/dotfiles-quickshell-pin"
+
+# The quickshell commit the current upstream tree pins.
+_pinned_commit() {
+    awk -F"'" '/^_commit=/ {print $2; exit}' \
+        "$CACHE_DIR/sdata/dist-arch/illogical-impulse-quickshell-git/PKGBUILD" 2>/dev/null
+}
+
+# The commit the installed package was built from, if we built it.
+_installed_pin() {
+    [[ -f "$CACHE_DIR/$_PIN_FILE_REL" ]] && cat "$CACHE_DIR/$_PIN_FILE_REL"
+}
+
+# True when the tree pins a quickshell we have not built yet. `update` and `deps`
+# are separate commands — one needs no root, the other rebuilds a Qt package —
+# but an update can move the pin, so both report this rather than let the shell
+# silently run against a runtime it was not written for.
+#
+# No record means the build predates this tracking, not that it is stale; saying
+# otherwise would nag on every run with no way to clear it.
+_pin_is_stale() {
+    local want have
+    want="$(_pinned_commit)" || return 1
+    [[ -n "$want" ]] || return 1
+    have="$(_installed_pin || true)"
+    [[ -n "$have" ]] || return 1
+    [[ "$want" != "$have" ]]
+}
+
+_pin_is_tracked() { [[ -n "$(_installed_pin || true)" ]]; }
 
 _upstream_tip() {
     local anchor="$CACHE_DIR/$_ANCHOR_FILE_REL" candidate
@@ -314,6 +357,7 @@ cmd_update() {
         merge --no-edit "$target"; then
         git -C "$CACHE_DIR" submodule update --init --recursive -q
         success "Merged cleanly. Now run: setup upstream export"
+        _warn_if_pin_stale
     else
         echo
         warn "Merge conflicts in:"
@@ -326,6 +370,16 @@ cmd_update() {
         info "  git -C $CACHE_DIR merge --abort"
         return 1
     fi
+}
+
+# Shown after an update and after an export: pulling new upstream code can move
+# the quickshell pin, and the two are installed by different commands.
+_warn_if_pin_stale() {
+    command -v pacman &>/dev/null || return 0
+    _pin_is_stale || return 0
+    echo
+    warn "Upstream now pins quickshell at $(_pinned_commit | cut -c1-8), which is not the build you have."
+    warn "Run 'setup upstream deps' to rebuild the runtime to match."
 }
 
 cmd_export() {
@@ -400,9 +454,21 @@ cmd_deps() {
     local pkgdir="$CACHE_DIR/sdata/dist-arch/illogical-impulse-quickshell-git"
     [[ -d "$pkgdir" ]] || { error "Not found: $pkgdir"; exit 1; }
 
-    local pinned
-    pinned="$(awk -F"'" '/^_commit=/ {print $2; exit}' "$pkgdir/PKGBUILD")"
+    local pinned expected have
+    pinned="$(_pinned_commit)"
     info "Upstream pins quickshell at ${pinned:0:8}"
+
+    # Skip a pointless Qt rebuild when the installed package already came from
+    # this PKGBUILD. Comparing pkgver-pkgrel is the only verifiable signal: the
+    # pkgver is a fixed placeholder, but upstream bumps pkgrel every time it
+    # moves _commit, so an exact match means the same pinned source.
+    expected="$(basename "$(cd "$pkgdir" && makepkg --packagelist 2>/dev/null | head -1)")"
+    have="$(pacman -Q illogical-impulse-quickshell-git 2>/dev/null | awk '{print $2}')"
+    if [[ -n "$have" && "$expected" == *"-$have-"* ]]; then
+        echo "$pinned" >"$CACHE_DIR/$_PIN_FILE_REL"
+        success "Already at ${pinned:0:8} (installed $have) — nothing to build."
+        return 0
+    fi
 
     # The metapackage declares conflicts=(quickshell quickshell-git), so the AUR
     # build has to be removed before this one can be installed. Build first and
@@ -424,9 +490,10 @@ cmd_deps() {
         sudo pacman -Rdd --noconfirm quickshell-git
     fi
     sudo pacman -U --noconfirm "$built"
+    echo "$pinned" >"$CACHE_DIR/$_PIN_FILE_REL"
 
     success "quickshell pinned at ${pinned:0:8}"
-    info "Restart the shell to pick it up:  qs -c prism"
+    info "Restart the shell to pick it up:  qs -c ii"
 }
 
 cmd_status() {
@@ -462,13 +529,18 @@ cmd_status() {
 
     if command -v pacman &>/dev/null; then
         local pinned
-        pinned="$(awk -F"'" '/^_commit=/ {print $2; exit}' \
-            "$CACHE_DIR/sdata/dist-arch/illogical-impulse-quickshell-git/PKGBUILD" 2>/dev/null || true)"
-        if pacman -Qq illogical-impulse-quickshell-git &>/dev/null; then
-            success "quickshell: pinned build installed (upstream pins ${pinned:0:8})"
-        elif pacman -Qq quickshell-git &>/dev/null; then
+        pinned="$(_pinned_commit || true)"
+        if ! pacman -Qq illogical-impulse-quickshell-git &>/dev/null; then
             warn "quickshell: unpinned AUR build installed — 'yay -Syu' can break the shell"
             warn "            run 'setup upstream deps' to switch to the pinned one"
+        elif _pin_is_stale; then
+            warn "quickshell: installed build is older than the pin (${pinned:0:8})"
+            warn "            run 'setup upstream deps' to rebuild the runtime"
+        elif ! _pin_is_tracked; then
+            success "quickshell: pinned build installed (upstream pins ${pinned:0:8})"
+            info "            built commit not recorded yet — the next 'deps' starts tracking it"
+        else
+            success "quickshell: pinned build installed and current (${pinned:0:8})"
         fi
     fi
     echo
@@ -482,16 +554,22 @@ Usage: setup upstream <subcommand>
     sync              Clone/fetch upstream, check out the locked commit and
                       rebuild the working tree from the overlay
     apply             Rebuild the working tree only (after editing patches)
-    update [--to REF] Fetch and merge upstream; stops on conflicts
+    update [--to REF] Fetch and merge upstream code; stops on conflicts
     export            Regenerate overlay/ and upstream.lock from the clone
-    deps              Build quickshell at the commit upstream pins
-    status            Show lock, drift and pending changes
+    deps              Build quickshell at the commit upstream pins (needs sudo)
+    status            Show lock, drift, pending changes and runtime pin
+
+'update' and 'deps' are separate on purpose: update only rewrites files and
+needs no root, while deps rebuilds a Qt package and does. They are related
+though — an update can move the quickshell pin, so update and status both say
+when deps needs rerunning.
 
 Typical update:
     setup upstream update
-    # resolve conflicts if any
+    # resolve conflicts if any, then:
     setup upstream export
     git add overlay && git commit
+    setup upstream deps      # only if update said the pin moved
 
 EOF
 }

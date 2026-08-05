@@ -1,0 +1,76 @@
+diff --git a/dots/.config/quickshell/ii/services/HyprlandKeybinds.qml b/dots/.config/quickshell/ii/services/HyprlandKeybinds.qml
+index 4c3e73bf..8c3c7ded 100644
+--- a/dots/.config/quickshell/ii/services/HyprlandKeybinds.qml
++++ b/dots/.config/quickshell/ii/services/HyprlandKeybinds.qml
+@@ -10,13 +10,54 @@ import Quickshell.Hyprland
+ 
+ /**
+  * A service that provides access to Hyprland keybinds.
+- * Uses the `get_keybinds.py` script to parse comments in config files in a certain format and convert to JSON.
++ * Parses the plain-text output of `hyprctl binds`, since `hyprctl binds -j`
++ * emits malformed JSON on some Hyprland versions (e.g. 0.56.0).
+  */
+ Singleton {
+     id: root
+     property var keybinds: []
+     property var keybindCategories: []
+ 
++    readonly property var intFields: ["modmask", "keycode"]
++
++    // Each bind starts with a line like `bindd`/`bindle`/..., followed by
++    // tab-indented `field: value` lines.
++    function parseBinds(text: string): list<var> {
++        const binds = []
++        let current = null
++        const lines = text.split("\n")
++        for (let i = 0; i < lines.length; i++) {
++            const line = lines[i]
++            if (line.startsWith("bind")) {
++                current = {
++                    "modmask": 0,
++                    "submap": "",
++                    "key": "",
++                    "keycode": 0,
++                    "catchall": false,
++                    "description": "",
++                    "dispatcher": "",
++                    "arg": "",
++                }
++                binds.push(current)
++                continue
++            }
++            if (!current || !line.startsWith("\t")) continue
++            const separator = line.indexOf(":")
++            if (separator === -1) continue
++            const field = line.substring(1, separator)
++            const value = line.substring(separator + 1).trim()
++            if (root.intFields.includes(field)) {
++                current[field] = parseInt(value) || 0
++            } else if (field === "catchall") {
++                current[field] = (value === "true")
++            } else {
++                current[field] = value
++            }
++        }
++        return binds
++    }
++
+     Connections {
+         target: Hyprland
+ 
+@@ -30,12 +71,12 @@ Singleton {
+     Process {
+         id: getKeybinds
+         running: true
+-        command: ["hyprctl", "binds", "-j"]
+-        
++        command: ["hyprctl", "binds"]
++
+         stdout: StdioCollector {
+             onStreamFinished: {
+                 try {
+-                    root.keybinds = JSON.parse(text)
++                    root.keybinds = root.parseBinds(text)
+                     var groups = []
+                     for (var i = 0; i < root.keybinds.length; i++) {
+                         var bind = root.keybinds[i].description

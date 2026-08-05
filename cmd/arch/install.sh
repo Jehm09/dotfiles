@@ -2,15 +2,23 @@
 # Arch Linux installer using archinstall.
 # Run from the Arch ISO live environment as root via:  setup install
 #
-# What it does:
-#   1. pacman -Syu          — updates the live ISO before installing
-#   2. Injects packages     — reads packages/apps.conf and merges into the JSON
-#   3. archinstall          — runs the automated installer with the merged config
+# Steps, in order:
+#   1  Validate       refuse to start unless the two JSONs and apps.conf exist
+#   2  Inject         merge apps.conf's official-repo packages into the JSON
+#   3  archinstall    run the automated installer with the merged config
+#
+# Only packages ABOVE the "# AUR only" marker in apps.conf are injected:
+# archinstall installs with pacman and cannot build from the AUR. Everything
+# below that marker is installed later by post-install.sh through paru/yay.
 #
 # To customize before running:
 #   archinstall/user_configuration.json  — disk layout, locale, kernel, mirrors, etc.
-#   archinstall/user_credentials.json   — user/root passwords (argon2id-encrypted)
-#   packages/apps.conf                  — pacman packages to include in the install
+#   archinstall/user_credentials.json    — user/root passwords (argon2id-encrypted)
+#   packages/apps.conf                   — packages to include in the install
+#
+# The live ISO is deliberately NOT updated first (`pacman -Syu`): it desyncs the
+# live system from the mirror snapshot archinstall then installs from, and on a
+# small ISO it can fill the root tmpfs. Update after the first boot instead.
 
 set -Eeuo pipefail
 
@@ -29,17 +37,11 @@ echo "Log: $LOG_FILE"
 echo ""
 
 # ------------------------------------------------------------------
-# Validate required files
+# 1. Validate required files
 # ------------------------------------------------------------------
 for f in "$CONFIG" "$CREDS" "$APPS_CONF"; do
     [[ -f "$f" ]] || { echo "ERROR: required file not found: $f"; exit 1; }
 done
-
-# ------------------------------------------------------------------
-# 1. Update live system
-# ------------------------------------------------------------------
-# echo "==> Updating live system..."
-# pacman -Syu --noconfirm
 
 # ------------------------------------------------------------------
 # 2. Inject packages from apps.conf into user_configuration.json
@@ -47,9 +49,7 @@ done
 # ------------------------------------------------------------------
 echo "==> Syncing packages from apps.conf into archinstall config..."
 
-# Parse apps.conf: official-repo section only (stops at the "## AUR only" marker).
-# AUR packages below that line cannot be installed by archinstall and are
-# handled by post-install.sh instead.
+# Official-repo section only: awk stops at the "# AUR only" marker.
 mapfile -t CONF_PKGS < <(
     awk '/^# AUR only/{exit} !/^\s*#/ && NF {print $1}' "$APPS_CONF" \
     | grep -v '^$'

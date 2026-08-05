@@ -1,5 +1,5 @@
 diff --git a/dots/.config/hypr/hyprland/keybinds.lua b/dots/.config/hypr/hyprland/keybinds.lua
-index 6078f0b4..48272f90 100644
+index 6078f0b4..5b7d2e38 100644
 --- a/dots/.config/hypr/hyprland/keybinds.lua
 +++ b/dots/.config/hypr/hyprland/keybinds.lua
 @@ -23,10 +23,6 @@ hl.bind("SUPER_R", hl.dsp.global("quickshell:workspaceNumber"),
@@ -50,7 +50,20 @@ index 6078f0b4..48272f90 100644
  
  --##! Screen
  --# Zoom
-@@ -194,112 +185,135 @@ hl.bind("SUPER + F", hl.dsp.window.fullscreen({ mode = "fullscreen", action = "t
+@@ -179,7 +170,11 @@ hl.bind("ALT + F4",
+     end,
+     { non_consuming = true })
+ hl.bind("SUPER + Q", hl.dsp.window.close(), { description = "Window: Close" })
+-hl.bind("SUPER + SHIFT + ALT + Q", hl.dsp.exec_cmd("hyprctl kill"), { description = "Window: Forcefully zap a window" })
++hl.bind("CTRL + SUPER + SHIFT + Q", hl.dsp.exec_cmd(
++        "hyprctl kill && notify-send \"Modo matar ventana\" " ..
++        "\"Haz clic en la ventana que quieres forzar a cerrar. Clic derecho o Esc para cancelar.\" " ..
++        "-a Hyprland -i process-stop -u critical"),
++    { description = "Window: Forcefully zap a window" })
+ 
+ --# Window split ratio
+ --#/# binde = SUPER, ;/',, -- Adjust split ratio
+@@ -194,112 +189,135 @@ hl.bind("SUPER + F", hl.dsp.window.fullscreen({ mode = "fullscreen", action = "t
  hl.bind("SUPER + ALT + F", hl.dsp.window.fullscreen_state({ internal = 0, client = 3, action = "toggle" }),
      { description = "Window: Fullscreen spoof" })
  hl.bind("SUPER + P", hl.dsp.window.pin(), { description = "Window: Pin" })
@@ -271,7 +284,7 @@ index 6078f0b4..48272f90 100644
  
  --##! Virtual machines
  hl.define_submap("virtual-machine", function()
-@@ -332,7 +346,7 @@ hl.bind("SUPER + ALT + Equal",
+@@ -332,7 +350,7 @@ hl.bind("SUPER + ALT + Equal",
      hl.dsp.exec_cmd("notify-send 'Urgent notification' 'Ah hell no' -u critical -a 'Hyprland keybind'")) -- # [hidden]
  
  --##! Session
@@ -280,7 +293,7 @@ index 6078f0b4..48272f90 100644
  hl.bind("SUPER + SHIFT + L", hl.dsp.exec_cmd("systemctl suspend || loginctl suspend"),
      { locked = true, description = "Session: Sleep" }) -- Sleep
  -- hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("systemctl suspend || loginctl suspend"), {locked = true} ) -- # [hidden] Suspend when laptop lid is closed, uncomment if for whatever reason it's not the default behavior
-@@ -347,6 +361,7 @@ hl.bind("SUPER + T", hl.dsp.exec_cmd(terminal))
+@@ -347,6 +365,7 @@ hl.bind("SUPER + T", hl.dsp.exec_cmd(terminal))
  hl.bind("CTRL + ALT + T", hl.dsp.exec_cmd(terminal))
  hl.bind("SUPER + E", hl.dsp.exec_cmd(fileManager), { description = "App: File manager" })
  hl.bind("SUPER + W", hl.dsp.exec_cmd(browser), { description = "App: Browser" })

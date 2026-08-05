@@ -1,0 +1,20 @@
+# Re-apply our sddm-astronaut-theme settings after the package is upgraded.
+#
+# The theme picks its variant through ConfigFile= in metadata.desktop, and the
+# per-variant settings live in Themes/*.conf — both inside /usr/share, owned by
+# the package. Every upgrade restores the upstream defaults (astronaut variant,
+# 1920x1080), which silently reverts the login screen. This puts it back.
+#
+# Keep the values here in sync with cmd/arch/post-install.sh, which applies the
+# same two edits on a fresh install.
+
+[Trigger]
+Operation = Install
+Operation = Upgrade
+Type = Package
+Target = sddm-astronaut-theme
+
+[Action]
+Description = Reapplying the hyprland_kath variant and screen size to sddm-astronaut-theme...
+When = PostTransaction
+Exec = /bin/sh -c 'THEME=/usr/share/sddm/themes/sddm-astronaut-theme; sed -i "s|^ConfigFile=.*|ConfigFile=Themes/hyprland_kath.conf|" "$THEME/metadata.desktop"; sed -i -e "s|^ScreenWidth=.*|ScreenWidth=\"2560\"|" -e "s|^ScreenHeight=.*|ScreenHeight=\"1440\"|" "$THEME/Themes/hyprland_kath.conf"'
