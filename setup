@@ -42,6 +42,14 @@ Subcommands:
                   this repo and reconstructed from overlay/hyprland/
                   sync | update | export | deps | status  ('setup upstream --help')
 
+    grub          Boot menu entry that starts a TTY instead of the graphical
+                  session, so a broken greeter cannot lock you out
+                  rescue | status | remove  ('setup grub --help')
+
+    greeter       Login screen — SDDM (themed, graphical) or greetd + sysc-greet
+                  (console, Cagebreak). Only one can be enabled.
+                  sddm | greetd | apply | test | status  ('setup greeter --help')
+
 Aliases:
     dots          Alias for 'dotfiles'
 
@@ -68,31 +76,98 @@ EOF
 # Interactive menu (shown when run without arguments in a terminal)
 # ------------------------------------------------------------------
 _show_menu() {
+    local choice
+    if has_menu; then
+        choice="$(menu_radiolist "Arch Linux Setup" \
+"Two things happen here, and only the first is one-off:\n\n\
+  install   runs once, from the Arch live ISO\n\
+  post      everything else, re-runnable, whole or by steps\n\n\
+Pick one:" \
+            post    "Configure the system  — opens the step menu" on \
+            tools   "Individual tools      — greeter, grub, upstream, kde" off \
+            install "Install Arch from the live ISO  (root, one-off)" off)" \
+            || exit 0
+    else
+        echo ""
+        echo -e "${_CLR_BOLD}  Arch Linux Setup${_CLR_RST}"
+        echo ""
+        echo "    1)  post      Configurar el sistema (abre el menú de pasos)"
+        echo "    2)  tools     Herramientas sueltas"
+        echo "    3)  install   Instalar Arch desde la ISO  (root, una sola vez)"
+        echo ""
+        echo "    0)  Salir"
+        echo ""
+        read -rp "  Opción: " _opt
+        case "$_opt" in
+            1) choice=post ;; 2) choice=tools ;; 3) choice=install ;;
+            0|"") exit 0 ;;
+            *) error "Opción inválida: $_opt"; exit 1 ;;
+        esac
+    fi
     echo ""
-    echo -e "${_CLR_BOLD}  Arch Linux Setup${_CLR_RST}"
+
+    case "$choice" in
+        post)    exec "$REPO_ROOT/setup" post ;;
+        install) exec "$REPO_ROOT/setup" install ;;
+        tools)   _show_tools_menu ;;
+    esac
+}
+
+# The pieces that are also steps of 'post', exposed on their own for when you
+# want to redo just one without walking the whole checklist.
+_show_tools_menu() {
+    local tool
+    if has_menu; then
+        tool="$(menu_radiolist "Tools" \
+"Each of these is also a step of 'post'. Here they run on their own." \
+            greeter-status "Login screen — what is active, what would break" on \
+            greeter-sddm   "Login screen — switch to SDDM"                   off \
+            greeter-greetd "Login screen — switch to greetd + sysc-greet"    off \
+            greeter-apply  "Login screen — re-apply config (after new monitors)" off \
+            grub           "Boot menu — add the console/TTY rescue entry"    off \
+            upstream       "end-4 shell — status, drift, unexported edits"   off \
+            dotfiles       "Link ~/.config for a desktop"                    off \
+            kde            "Apply the KDE Plasma profile"                    off)" \
+            || exit 0
+    else
+        echo "    1) greeter status   2) greeter sddm   3) greeter greetd"
+        echo "    4) greeter apply    5) grub           6) upstream"
+        echo "    7) dotfiles         8) kde            0) salir"
+        read -rp "  Opción: " _o
+        case "$_o" in
+            1) tool=greeter-status ;; 2) tool=greeter-sddm ;; 3) tool=greeter-greetd ;;
+            4) tool=greeter-apply  ;; 5) tool=grub ;; 6) tool=upstream ;;
+            7) tool=dotfiles ;; 8) tool=kde ;;
+            *) exit 0 ;;
+        esac
+    fi
     echo ""
-    echo "    1)  install     Instalación desde Arch ISO  (requiere root)"
-    echo "    2)  post        Post-instalación tras el primer arranque"
-    echo "    3)  dotfiles    Enlazar ~/.config  (pregunta hyprland o kde)"
-    echo "    4)  kde         Aplicar el perfil de KDE Plasma a ~/.config"
-    echo ""
-    echo "    0)  Salir"
-    echo ""
-    read -rp "  Opción: " _opt
-    echo ""
-    case "$_opt" in
-        1) exec "$REPO_ROOT/setup" install  ;;
-        2) exec "$REPO_ROOT/setup" post     ;;
-        3) _ask_desktop; exec "$REPO_ROOT/setup" dotfiles "$_desktop" ;;
-        4) exec "$REPO_ROOT/setup" kde apply ;;
-        0|"") exit 0                        ;;
-        *) error "Opción inválida: $_opt"; exit 1 ;;
+
+    case "$tool" in
+        greeter-status) exec "$REPO_ROOT/setup" greeter status ;;
+        greeter-sddm)   exec "$REPO_ROOT/setup" greeter sddm   ;;
+        greeter-greetd) exec "$REPO_ROOT/setup" greeter greetd ;;
+        greeter-apply)  exec "$REPO_ROOT/setup" greeter apply  ;;
+        grub)           exec "$REPO_ROOT/setup" grub rescue    ;;
+        upstream)       exec "$REPO_ROOT/setup" upstream status ;;
+        kde)            exec "$REPO_ROOT/setup" kde apply      ;;
+        dotfiles)       _ask_desktop; exec "$REPO_ROOT/setup" dotfiles "$_desktop" ;;
     esac
 }
 
 # There is no default desktop: the two profiles are mutually exclusive, so the
 # choice is always explicit.
 _ask_desktop() {
+    if has_menu; then
+        _desktop="$(menu_radiolist "Desktop" \
+"dots/common always gets linked: kitty, fish, fastfetch, yazi, mpv, starship —\n\
+the terminal and CLI side, which is the same whichever desktop you run.\n\n\
+The desktop only decides what gets linked ON TOP of that:" \
+            hyprland "+ the graphical side: hypr, quickshell, fuzzel, wlogout" on \
+            kde      "+ nothing here — Plasma is copy-managed by 'setup kde apply'" off)" \
+            || exit 0
+        return
+    fi
     echo "    ¿Qué escritorio?"
     echo ""
     echo "      1) hyprland   dots/common + dots/hyprland"
@@ -141,6 +216,18 @@ case "${1:-}" in
         shift
         prevent_root
         bash "$REPO_ROOT/cmd/lib/upstream.sh" "$@"
+        ;;
+
+    grub)
+        shift
+        prevent_root
+        bash "$REPO_ROOT/cmd/lib/grub.sh" "$@"
+        ;;
+
+    greeter)
+        shift
+        prevent_root
+        bash "$REPO_ROOT/cmd/lib/greeter.sh" "$@"
         ;;
 
     -h|--help|help)

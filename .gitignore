@@ -1,6 +1,11 @@
 # Generated at runtime — do not commit
 arch-install.log
 
+# Settings that describe one machine rather than the configuration: which
+# monitor the login is pinned to, and the like. Committing it would stop the
+# repo installing cleanly elsewhere. See local.conf.example.
+/local.conf
+
 # The upstream clone lives in $XDG_DATA_HOME/dotfiles/upstream, outside this
 # repo. Ignored here only in case someone points DOTFILES_UPSTREAM_DIR inside it.
 /upstream/

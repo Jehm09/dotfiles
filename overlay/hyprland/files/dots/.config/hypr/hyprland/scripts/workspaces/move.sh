@@ -149,15 +149,32 @@ else
     hyprctl eval "hl.workspace_rule({workspace = \"${target_ws}\", monitor = \"${target_monitor}\", persistent = true})" >/dev/null 2>&1
 fi
 
+# Resolve the window ONCE, up front, and address it explicitly below.
+#
+# Without this the dispatch means "whatever is focused when Hyprland gets round
+# to it", which is not the same thing as "the window that was focused when the
+# key was pressed" — this script does several hyprctl round trips first, and
+# anything that steals focus in between (a notification, the shell restoring a
+# minimised window, a second keypress) makes the move land on a different
+# window. That is how one keypress ends up moving two windows.
+#
+# Naming the address also makes a repeated dispatch idempotent: firing twice
+# moves the same window twice, which is a no-op, instead of taking a second one
+# with it.
+win_addr=$(hyprctl -j activewindow 2>/dev/null | jq -r '.address // empty' 2>/dev/null || echo "")
+win_sel=""
+[[ -n "$win_addr" && "$win_addr" != "null" ]] && win_sel=", window = \"address:${win_addr}\""
+
 case "$action" in
     focus)
         hyprctl dispatch "hl.dsp.focus({workspace = \"${target_ws}\"})" >/dev/null
         ;;
     move)
-        hyprctl dispatch "hl.dsp.window.move({workspace = \"${target_ws}\", follow = false})" >/dev/null
+        hyprctl dispatch "hl.dsp.window.move({workspace = \"${target_ws}\", follow = false${win_sel}})" >/dev/null
         ;;
     movefollow)
-        hyprctl dispatch "hl.dsp.window.move({workspace = \"${target_ws}\", follow = true})" >/dev/null
+        # follow = true moves the window AND takes you with it.
+        hyprctl dispatch "hl.dsp.window.move({workspace = \"${target_ws}\", follow = true${win_sel}})" >/dev/null
         ;;
     *) echo "[workspaces/move] acción desconocida: $action" >&2; exit 1 ;;
 esac

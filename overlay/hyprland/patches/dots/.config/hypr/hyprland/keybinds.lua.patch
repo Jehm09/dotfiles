@@ -1,5 +1,5 @@
 diff --git a/dots/.config/hypr/hyprland/keybinds.lua b/dots/.config/hypr/hyprland/keybinds.lua
-index 6078f0b4..5b7d2e38 100644
+index 6078f0b4..3b8372d7 100644
 --- a/dots/.config/hypr/hyprland/keybinds.lua
 +++ b/dots/.config/hypr/hyprland/keybinds.lua
 @@ -23,10 +23,6 @@ hl.bind("SUPER_R", hl.dsp.global("quickshell:workspaceNumber"),
@@ -50,7 +50,39 @@ index 6078f0b4..5b7d2e38 100644
  
  --##! Screen
  --# Zoom
-@@ -179,7 +170,11 @@ hl.bind("ALT + F4",
+@@ -125,19 +116,23 @@ hl.bind("SUPER + code:82", function() zoomfunction(-0.3) end, { repeating = true
+ hl.bind("SUPER + code:86", function() zoomfunction(0.3) end, { repeating = true })
+ 
+ --##! Media
+-local mediaNextCommand =
+-"playerctl next || playerctl position `bc <<< \"100 * $(playerctl metadata mpris:length) / 1000000 / 100\"`"
++-- Via the shell, not bare `playerctl`: without --player it picks the first bus
++-- alphabetically, so "brave" always won even when Chrome or Glassy was playing.
++-- The shell already knows the active player. playerctl stays as fallback.
++local mediaPlayPause = qsIpcCall .. " mpris playPause || playerctl play-pause"
++local mediaPrevious = qsIpcCall .. " mpris previous || playerctl previous"
++local mediaNextCommand = qsIpcCall .. " mpris next || playerctl next"
+ hl.bind("SUPER + SHIFT + N", hl.dsp.exec_cmd(mediaNextCommand), { locked = true, description = "Media: Next track" })
+ hl.bind("XF86AudioNext", hl.dsp.exec_cmd(mediaNextCommand), { locked = true })
+-hl.bind("XF86AudioPrev", hl.dsp.exec_cmd("playerctl previous"), { locked = true })
+-hl.bind("SUPER + SHIFT + ALT + mouse:275", hl.dsp.exec_cmd("playerctl previous"))
++hl.bind("XF86AudioPrev", hl.dsp.exec_cmd(mediaPrevious), { locked = true })
++hl.bind("SUPER + SHIFT + ALT + mouse:275", hl.dsp.exec_cmd(mediaPrevious))
+ hl.bind("SUPER + SHIFT + ALT + mouse:276", hl.dsp.exec_cmd(mediaNextCommand))
+-hl.bind("SUPER + SHIFT + B", hl.dsp.exec_cmd("playerctl previous"),
++hl.bind("SUPER + SHIFT + B", hl.dsp.exec_cmd(mediaPrevious),
+     { locked = true, description = "Media: Previous track" })
+-hl.bind("SUPER + SHIFT + P", hl.dsp.exec_cmd("playerctl play-pause"),
++hl.bind("SUPER + SHIFT + P", hl.dsp.exec_cmd(mediaPlayPause),
+     { locked = true, description = "Media: Play/pause media" })
+-hl.bind("XF86AudioPlay", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
+-hl.bind("XF86AudioPause", hl.dsp.exec_cmd("playerctl play-pause"), { locked = true })
++hl.bind("XF86AudioPlay", hl.dsp.exec_cmd(mediaPlayPause), { locked = true })
++hl.bind("XF86AudioPause", hl.dsp.exec_cmd(mediaPlayPause), { locked = true })
+ hl.bind("XF86AudioMute", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_SINK@ toggle"), { locked = true })
+ hl.bind("SUPER + SHIFT + M", hl.dsp.exec_cmd("wpctl set-mute @DEFAULT_SINK@ toggle"),
+     { locked = true, description = "Media: Toggle mute" })
+@@ -179,7 +174,11 @@ hl.bind("ALT + F4",
      end,
      { non_consuming = true })
  hl.bind("SUPER + Q", hl.dsp.window.close(), { description = "Window: Close" })
@@ -63,7 +95,7 @@ index 6078f0b4..5b7d2e38 100644
  
  --# Window split ratio
  --#/# binde = SUPER, ;/',, -- Adjust split ratio
-@@ -194,112 +189,135 @@ hl.bind("SUPER + F", hl.dsp.window.fullscreen({ mode = "fullscreen", action = "t
+@@ -194,112 +193,143 @@ hl.bind("SUPER + F", hl.dsp.window.fullscreen({ mode = "fullscreen", action = "t
  hl.bind("SUPER + ALT + F", hl.dsp.window.fullscreen_state({ internal = 0, client = 3, action = "toggle" }),
      { description = "Window: Fullscreen spoof" })
  hl.bind("SUPER + P", hl.dsp.window.pin(), { description = "Window: Pin" })
@@ -78,6 +110,12 @@ index 6078f0b4..5b7d2e38 100644
 +--  SUPER+ALT+N y SUPER+SHIFT+N: silent (tú te quedas en el ws actual)
 +local wsMove = hyprScripts .. "/workspaces/move.sh"
 +local wsGroupSize = 5
++-- Fila numérica. UNA sola forma por tecla.
++--
++-- Antes había también un bucle con "code:10".."code:14", que es LA MISMA TECLA
++-- FÍSICA que "1".."5": Hyprland registraba dos binds sobre la misma pulsación,
++-- disparaba move.sh dos veces y se llevaba dos ventanas — la enfocada y la que
++-- quedaba enfocada tras la primera. De ahí el "me las mueve de 2 en 2".
 +for i = 1, wsGroupSize do
 +    hl.bind("SUPER + SHIFT + " .. (i % 10),
 +        hl.dsp.exec_cmd(wsMove .. " --action move --slot " .. i),
@@ -92,11 +130,8 @@ index 6078f0b4..5b7d2e38 100644
 --- end
 ---# keypad numbers
 -for i = 1, 10 do
-+for i = 1, wsGroupSize do
-+    local numberkey = { 10, 11, 12, 13, 14, 15, 16, 17, 18, 19 }
-+    hl.bind("SUPER + SHIFT + code:" .. numberkey[i],
-+        hl.dsp.exec_cmd(wsMove .. " --action move --slot " .. i))
-+end
++
++-- Numpad: teclas físicas distintas, así que aquí no hay conflicto.
 +for i = 1, wsGroupSize do
      local numpadkey = { 87, 88, 89, 83, 84, 85, 79, 80, 81, 90 }
 -    hl.bind("SUPER + ALT + code:" .. numpadkey[i], function()
@@ -131,6 +166,11 @@ index 6078f0b4..5b7d2e38 100644
 -    local prefix = { "r+", "r-", "r+", "r-" }
 -    hl.bind(keycombos[i], hl.dsp.window.move({ workspace = prefix[i] .. "1" })) -- # [hidden]
 -end
++-- Mover-la-ventana-y-seguirla con la rueda ya existe como CTRL+SUPER+rueda,
++-- definido más abajo junto a los binds de foco. No se duplica aquí añadiendo
++-- SHIFT: dos combinaciones para lo mismo solo gastan teclas y ensucian la
++-- cheatsheet.
++
 +hl.bind("SUPER + SHIFT + Page_Up",
 +    hl.dsp.exec_cmd(wsMove .. " --action move --slot-dir -1"),
 +    {description = "Window: Send to workspace left"})
@@ -284,7 +324,7 @@ index 6078f0b4..5b7d2e38 100644
  
  --##! Virtual machines
  hl.define_submap("virtual-machine", function()
-@@ -332,7 +350,7 @@ hl.bind("SUPER + ALT + Equal",
+@@ -332,7 +362,7 @@ hl.bind("SUPER + ALT + Equal",
      hl.dsp.exec_cmd("notify-send 'Urgent notification' 'Ah hell no' -u critical -a 'Hyprland keybind'")) -- # [hidden]
  
  --##! Session
@@ -293,7 +333,7 @@ index 6078f0b4..5b7d2e38 100644
  hl.bind("SUPER + SHIFT + L", hl.dsp.exec_cmd("systemctl suspend || loginctl suspend"),
      { locked = true, description = "Session: Sleep" }) -- Sleep
  -- hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("systemctl suspend || loginctl suspend"), {locked = true} ) -- # [hidden] Suspend when laptop lid is closed, uncomment if for whatever reason it's not the default behavior
-@@ -347,6 +365,7 @@ hl.bind("SUPER + T", hl.dsp.exec_cmd(terminal))
+@@ -347,6 +377,7 @@ hl.bind("SUPER + T", hl.dsp.exec_cmd(terminal))
  hl.bind("CTRL + ALT + T", hl.dsp.exec_cmd(terminal))
  hl.bind("SUPER + E", hl.dsp.exec_cmd(fileManager), { description = "App: File manager" })
  hl.bind("SUPER + W", hl.dsp.exec_cmd(browser), { description = "App: Browser" })

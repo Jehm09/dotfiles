@@ -1,0 +1,193 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/mediaControls/MediaControls.qml b/dots/.config/quickshell/ii/modules/ii/mediaControls/MediaControls.qml
+index 3d98be7c..1e1602b8 100644
+--- a/dots/.config/quickshell/ii/modules/ii/mediaControls/MediaControls.qml
++++ b/dots/.config/quickshell/ii/modules/ii/mediaControls/MediaControls.qml
+@@ -21,9 +21,53 @@ Scope {
+     readonly property real osdWidth: Appearance.sizes.osdWidth
+     readonly property real widgetWidth: Appearance.sizes.mediaControlsWidth
+     readonly property real widgetHeight: Appearance.sizes.mediaControlsHeight
++    readonly property real arrowWidth: 40
++    // Window must include the arrows or the right one falls outside it.
++    readonly property real popupWidth: widgetWidth + (meaningfulPlayers.length > 1 ? arrowWidth * 2 : 0)
+     property real popupRounding: Appearance.rounding.screenRounding - Appearance.sizes.hyprlandGapsOut + 1
+     property list<real> visualizerPoints: []
+ 
++    // Arrow to move between players, styled like the track-change buttons.
++    component MediaSwitchButton: RippleButton {
++        property string buttonIcon
++        implicitWidth: root.arrowWidth
++        implicitHeight: root.arrowWidth
++        buttonRadius: Appearance.rounding.full
++        Layout.alignment: Qt.AlignVCenter
++        // Solid layer0 fill: transparent arrows disappear over the album art.
++        colBackground: Appearance.colors.colLayer0
++        colBackgroundHover: Appearance.colors.colLayer0Hover
++        colRipple: Appearance.colors.colLayer0Active
++
++        contentItem: MaterialSymbol {
++            iconSize: 28
++            fill: 1
++            horizontalAlignment: Text.AlignHCenter
++            color: Appearance.colors.colOnLayer0
++            text: buttonIcon
++        }
++    }
++
++    // Which player the popup is showing. Follows the active one — whatever
++    // started playing last — unless you arrow away from it.
++    readonly property int activeIndex: Math.max(0, meaningfulPlayers.indexOf(activePlayer))
++    property int browseIndex: -1
++    readonly property int shownIndex: browseIndex >= 0 && browseIndex < meaningfulPlayers.length ? browseIndex : activeIndex
++    readonly property MprisPlayer shownPlayer: meaningfulPlayers[shownIndex] ?? null
++
++    // Arrowing to a player makes it the active one, so the keybinds follow too.
++    function showPlayerAt(index) {
++        const n = meaningfulPlayers.length;
++        if (n === 0)
++            return;
++        const wrapped = ((index % n) + n) % n;
++        browseIndex = wrapped;
++        MprisController.setActivePlayer(meaningfulPlayers[wrapped]);
++    }
++
++    // Something else started playing: drop back to following it.
++    onActivePlayerChanged: browseIndex = -1
++
+     function filterDuplicatePlayers(players) {
+         let filtered = [];
+         let used = new Set();
+@@ -37,7 +81,14 @@ Scope {
+             // Find duplicates by trackTitle prefix
+             for (let j = i + 1; j < players.length; ++j) {
+                 let p2 = players[j];
+-                if (p1.trackTitle && p2.trackTitle && (p1.trackTitle.includes(p2.trackTitle) || p2.trackTitle.includes(p1.trackTitle)) || (p1.position - p2.position <= 2 && p1.length - p2.length <= 2)) {
++                // Math.abs was missing: any player shorter and earlier than
++                // another counted as its duplicate and got dropped.
++                const sameTitle = p1.trackTitle && p2.trackTitle
++                    && (p1.trackTitle.includes(p2.trackTitle) || p2.trackTitle.includes(p1.trackTitle));
++                const sameMedia = p1.length > 0 && p2.length > 0
++                    && Math.abs(p1.length - p2.length) <= 2
++                    && Math.abs(p1.position - p2.position) <= 2;
++                if (sameTitle || sameMedia) {
+                     group.push(j);
+                 }
+             }
+@@ -86,7 +137,7 @@ Scope {
+ 
+             exclusionMode: ExclusionMode.Ignore
+             exclusiveZone: 0
+-            implicitWidth: root.widgetWidth
++            implicitWidth: root.popupWidth
+             implicitHeight: playerColumnLayout.implicitHeight
+             color: "transparent"
+             WlrLayershell.namespace: "quickshell:mediaControls"
+@@ -100,7 +151,7 @@ Scope {
+             margins {
+                 top: Config.options.bar.vertical ? ((panelWindow.screen.height / 2) - widgetHeight * 1.5) : Appearance.sizes.barHeight
+                 bottom: Appearance.sizes.barHeight
+-                left: Config.options.bar.vertical ? Appearance.sizes.barHeight : ((panelWindow.screen.width / 2) - (osdWidth / 2) - widgetWidth)
++                left: Config.options.bar.vertical ? Appearance.sizes.barHeight : ((panelWindow.screen.width / 2) - (osdWidth / 2) - root.popupWidth)
+                 right: Appearance.sizes.barHeight
+             }
+ 
+@@ -126,17 +177,90 @@ Scope {
+                 anchors.fill: parent
+                 spacing: -Appearance.sizes.elevationMargin // Shadow overlap okay
+ 
+-                Repeater {
+-                    model: ScriptModel {
+-                        values: root.meaningfulPlayers
++                // One player at a time, arrows to cycle. Upstream stacked every
++                // player vertically in D-Bus order, which has no meaning.
++                RowLayout {
++                    visible: root.meaningfulPlayers.length > 0
++                    spacing: 0
++
++                    MediaSwitchButton {
++                        visible: root.meaningfulPlayers.length > 1
++                        buttonIcon: "chevron_left"
++                        onClicked: root.showPlayerAt(root.shownIndex - 1)
+                     }
+-                    delegate: PlayerControl {
+-                        required property MprisPlayer modelData
+-                        player: modelData
+-                        visualizerPoints: root.visualizerPoints
+-                        implicitWidth: root.widgetWidth
+-                        implicitHeight: root.widgetHeight
+-                        radius: root.popupRounding
++
++                    // Carousel: every card sits in a strip, shifted so the current
++                    // one is in view. Dragging moves the strip, so the neighbour
++                    // slides in behind your finger instead of the card swapping
++                    // contents all at once.
++                    Item {
++                        id: viewport
++                        Layout.preferredWidth: root.widgetWidth
++                        Layout.preferredHeight: root.widgetHeight
++                        clip: true
++
++                        property real dragOffset: 0
++
++                        Row {
++                            spacing: 0
++                            height: parent.height
++                            x: -root.shownIndex * root.widgetWidth + viewport.dragOffset
++
++                            Behavior on x {
++                                enabled: !swipe.active
++                                NumberAnimation {
++                                    duration: 250
++                                    easing.type: Easing.OutCubic
++                                }
++                            }
++
++                            Repeater {
++                                model: ScriptModel {
++                                    values: root.meaningfulPlayers
++                                }
++                                delegate: PlayerControl {
++                                    required property MprisPlayer modelData
++                                    player: modelData
++                                    visualizerPoints: root.visualizerPoints
++                                    width: root.widgetWidth
++                                    height: root.widgetHeight
++                                    radius: root.popupRounding
++                                }
++                            }
++                        }
++
++                        DragHandler {
++                            id: swipe
++                            enabled: root.meaningfulPlayers.length > 1
++                            yAxis.enabled: false
++                            // target: null so the handler only reports the gesture
++                            // and the strip is moved here. Scene coordinates
++                            // because centroid.position is relative to the item,
++                            // which is itself moving — that delta stays ~0.
++                            target: null
++
++                            onCentroidChanged: if (active) {
++                                viewport.dragOffset = centroid.scenePosition.x - centroid.scenePressPosition.x;
++                            }
++
++                            onActiveChanged: {
++                                if (active)
++                                    return;
++                                const dx = viewport.dragOffset;
++                                viewport.dragOffset = 0;
++                                // A third of the card: enough that nudging the
++                                // seek bar cannot flip the player by accident.
++                                if (Math.abs(dx) >= root.widgetWidth / 3) {
++                                    root.showPlayerAt(root.shownIndex + (dx < 0 ? 1 : -1));
++                                }
++                            }
++                        }
++                    }
++
++                    MediaSwitchButton {
++                        visible: root.meaningfulPlayers.length > 1
++                        buttonIcon: "chevron_right"
++                        onClicked: root.showPlayerAt(root.shownIndex + 1)
+                     }
+                 }
+ 

@@ -1,0 +1,51 @@
+# Machine-local settings — copy to local.conf (which is gitignored).
+#
+# These describe THIS machine, not the configuration. They are deliberately not
+# defaults in the scripts: baking a monitor name or a GPU workaround into the
+# repo is what stops it installing cleanly on the next machine.
+#
+# local.conf is sourced by cmd/lib/utils.sh before anything reads these values,
+# and every one is read as ${VAR:-default}, so passing the variable on the
+# command line still wins for a single run:
+#
+#     GREETER_OUTPUT=HDMI-A-1 setup greeter apply
+#
+# 'setup greeter apply' writes back whatever it was given, so the setting sticks
+# and a later plain run does not undo it.
+
+# ------------------------------------------------------------------
+# Login screen
+# ------------------------------------------------------------------
+
+# Which compositor draws the SDDM greeter: kwin (default) or weston.
+#
+#   kwin     Draws a cursor — it implements wp_cursor_shape_manager_v1, which is
+#            what Qt 6 asks for. Pinning the greeter to one output is
+#            best-effort (its config format is versioned).
+#   weston   Never draws a cursor at all, on any GPU. Pinning the output is
+#            reliable. Only worth it if the monitor matters more than the mouse.
+#
+#GREETER_COMPOSITOR=kwin
+
+# Pin the login screen to a single output, e.g. DP-5. Empty means every screen,
+# which is SDDM's own behaviour: it instantiates the theme on every QScreen the
+# compositor exposes.
+#
+# Use the connector name the kernel reports — the same one Hyprland uses in
+# monitors.lua. To list them:
+#
+#     for s in /sys/class/drm/card*-*/status; do
+#         [ "$(cat "$s")" = connected ] && basename "$(dirname "$s")"
+#     done
+#
+#GREETER_OUTPUT=DP-5
+
+# ------------------------------------------------------------------
+# Upstream shell
+# ------------------------------------------------------------------
+
+# Where end-4/dots-hyprland is cloned. Defaults to
+# $XDG_DATA_HOME/dotfiles/upstream. Only worth setting to keep the clone on a
+# different disk.
+#
+#DOTFILES_UPSTREAM_DIR=/home/you/.local/share/dotfiles/upstream

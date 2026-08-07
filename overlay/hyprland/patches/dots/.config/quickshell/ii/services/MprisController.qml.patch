@@ -1,0 +1,44 @@
+diff --git a/dots/.config/quickshell/ii/services/MprisController.qml b/dots/.config/quickshell/ii/services/MprisController.qml
+index 7faed227..cffaeb65 100644
+--- a/dots/.config/quickshell/ii/services/MprisController.qml
++++ b/dots/.config/quickshell/ii/services/MprisController.qml
+@@ -18,7 +18,10 @@ Singleton {
+ 	id: root;
+ 	property list<MprisPlayer> players: Mpris.players.values.filter(player => isRealPlayer(player));
+ 	property MprisPlayer trackedPlayer: null;
+-	property MprisPlayer activePlayer: trackedPlayer ?? Mpris.players.values[0] ?? null;
++	// Fall back to whatever is playing, then to the filtered list. Upstream fell
++	// back to Mpris.players.values[0] — unfiltered and alphabetical, so "brave"
++	// always won regardless of what was actually playing.
++	property MprisPlayer activePlayer: trackedPlayer ?? players.find(p => p.isPlaying) ?? players[0] ?? null;
+ 	signal trackChanged(reverse: bool);
+ 
+ 	property bool __reverse: false;
+@@ -29,6 +32,12 @@ Singleton {
+ 		p => p.dbusName?.startsWith('org.mpris.MediaPlayer2.plasma-browser-integration')
+ 	)
+ 	function isRealPlayer(player) {
++        // Chromium keeps its MPRIS bus after the media is gone: Stopped, no
++        // metadata, CanPlay and CanPause both false. Nothing behind it, so it is
++        // not a player. A paused player still reports CanPlay=true.
++        if (!player.isPlaying && !player.canTogglePlaying) {
++            return false;
++        }
+         if (!Config.options.media.filterDuplicatePlayers) {
+             return true;
+         }
+@@ -70,8 +79,13 @@ Singleton {
+ 				}
+ 			}
+ 
++			// Only the player that STARTS playing takes the slot. Upstream took it
++			// on any state change, so a browser going Stopped stole it from
++			// whatever was actually playing.
+ 			function onPlaybackStateChanged() {
+-				if (root.trackedPlayer !== modelData) root.trackedPlayer = modelData;
++				if (modelData.isPlaying && root.trackedPlayer !== modelData) {
++					root.trackedPlayer = modelData;
++				}
+ 			}
+ 		}
+ 	}

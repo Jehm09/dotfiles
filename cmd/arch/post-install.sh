@@ -2,29 +2,34 @@
 # Post-install setup — run after first boot into the new Arch system.
 # Handles everything archinstall cannot.
 #
-# Steps, in order:
-#   1   Multilib          enable the [multilib] repo (Steam, 32-bit apps)
-#   2   AUR helper        install paru (or yay)
-#   3   Desktop packages  deps-hyprland+deps-quickshell, or deps-kde
-#   3b  Plasma session    KWallet PAM hook + apply the copy-managed dots/kde   [kde]
-#   3c  Quickshell        pinned quickshell build + Python venv          [hyprland]
-#   4   Apps              everything in apps.conf (official + AUR)
-#   5   Display manager   SDDM + sddm-astronaut-theme (hyprland_kath variant)
-#   6   Pacman hooks      install packages/hooks/enabled/ to /etc/pacman.d/hooks
-#   7   Dotfiles          symlink ~/.config for the chosen desktop
-#   8   Shell             set fish as the login shell
-#   9   Hardware fixes    Logitech mouse module blacklist + initramfs rebuild
+# This is the only script you re-run. 'setup install' is the one-off that runs
+# archinstall from the live ISO; everything else lives here, and can be run
+# whole, a step at a time, or again later.
 #
-# Steps 3b and 3c are mutually exclusive: they follow the desktop choice, which
-# is required and has no default.
+# Steps run in this order, and the order is the point: each assumes the ones
+# above it are done. Skipping one means "already handled some other way".
+#
+#   1   multilib   enable the [multilib] repo (Steam, 32-bit apps)
+#   2   aur        install yay / paru / both — steps 3+ install through it
+#   3   desktop    deps-hyprland + deps-quickshell, or deps-kde
+#   3b    plasma     KWallet PAM hook + the copy-managed dots/kde     [kde only]
+#   3c    quickshell pinned quickshell build + Python venv       [hyprland only]
+#   4   apps       everything in apps.conf (official + AUR)
+#   5   greeter    SDDM + astronaut theme, or greetd + sysc-greet
+#   6   hooks      install packages/hooks/enabled/ to /etc/pacman.d/hooks
+#   7   dotfiles   symlink ~/.config — dots/common plus the desktop profile
+#   8   shell      set fish as the login shell
+#   9   hwfix      Logitech mouse module blacklist + initramfs rebuild
+#
+# 3b and 3c are mutually exclusive: they follow the desktop choice, which is
+# required and has no default.
 #
 # Usage:
-#   setup post --hyprland        Interactive component selection
-#   setup post --all --hyprland  Run everything without prompting
-#   setup post --dotfiles        Only link dotfiles
-#   setup post --pkgs            Only AUR helper + all packages
-#   setup post --desktop-only    Only the chosen desktop's packages + config
-#   setup post --help            Full flag reference
+#   setup post --hyprland                  Pick steps in a menu
+#   setup post --all --hyprland            Everything, no prompts
+#   setup post --only greeter --hyprland   One step
+#   setup post --skip apps,hwfix --kde     Everything but those
+#   setup post --help                      Full flag reference
 
 set -Eeuo pipefail
 
@@ -39,156 +44,226 @@ prevent_root
 # not run without one. It is started further down, once we know work will happen.
 
 # ------------------------------------------------------------------
-# Defaults
+# Steps
 # ------------------------------------------------------------------
-_do_multilib=true
-_do_aur_helper=true
-_aur_helper="paru"        # paru | yay
-_do_desktop=true
+# Every step has a name. --only and --skip take those names, the menu shows
+# them, and each numbered section below is guarded by its _do_<name> variable.
+# Adding a step means adding it here, to STEP_DESC, and to its own section.
+STEPS=(multilib aur desktop apps greeter hooks dotfiles shell hwfix)
+
+# Descriptions double as the menu labels. The order of STEPS above is the order
+# things must happen in, and the numbers make that visible: each step assumes the
+# ones above it are done. Skipping one is fine — it just means "I already have
+# this handled some other way".
+declare -A STEP_DESC=(
+    [multilib]="1. base     [multilib] repo — Steam, 32-bit apps"
+    [aur]="2. base     paru/yay — every step below installs through it"
+    [desktop]="3. desktop  graphical stack — Hyprland/Quickshell or Plasma"
+    [apps]="4. apps     browsers, editors, games — apps.conf"
+    [greeter]="5. login    SDDM, or greetd + sysc-greet"
+    [hooks]="6. system   pacman hooks from hooks/enabled/"
+    [dotfiles]="7. config   ~/.config — kitty, fish, fastfetch + desktop"
+    [shell]="8. config   fish as the login shell"
+    [hwfix]="9. hardware Logitech mouse fix + initramfs"
+)
+
+# One label format for both the menu and --help, so they cannot drift.
+_step_label() { printf '%-10s %s' "$1" "${STEP_DESC[$1]}"; }
+
+# Which AUR helpers are already installed. Everything from step 3 down installs
+# through one, so when there is none the AUR step stops being optional.
+_installed_helpers() {
+    local h
+    for h in paru yay; do command -v "$h" &>/dev/null && echo "$h"; done
+}
+
+for _s in "${STEPS[@]}"; do declare "_do_${_s}=true"; done
+
+# Which helper to install, and to use for every package list afterwards.
+# yay by default: it builds faster and needs less setup than paru on a bare
+# system, which is the situation where this actually gets installed.
+_aur_helper="yay"         # yay | paru | both
+
 # Which desktop this machine gets. No default on purpose: the two profiles are
-# mutually exclusive and every step below (packages, dotfiles, session) follows
-# this one choice. Set with --hyprland / --kde, or 'd' in the menu.
+# mutually exclusive and the packages, dotfiles and session all follow from it.
 _desktop=""
-_do_apps=true
-_do_greeter=true
-_do_hooks=true
-_do_dotfiles=true
-_do_shell=true
-_do_hwfix=true
+
+# Which login screen. SDDM is the default; greetd + sysc-greet (Cagebreak) is
+# the lighter alternative. See cmd/lib/greeter.sh.
+_greeter="sddm"
 
 _flag_noninteractive=false
+
+_set_steps() {   # _set_steps <on|off> <comma-separated names>
+    local state="$1" list="${2//,/ }" s
+    for s in $list; do
+        if [[ " ${STEPS[*]} " != *" $s "* ]]; then
+            error "Unknown step: $s"
+            error "Valid: ${STEPS[*]}"
+            exit 1
+        fi
+        declare -g "_do_${s}=$state"
+    done
+}
+
+_only() {  # keep just the named steps
+    local s
+    for s in "${STEPS[@]}"; do declare -g "_do_${s}=false"; done
+    _set_steps true "$1"
+    _flag_noninteractive=true
+}
 
 # ------------------------------------------------------------------
 # Parse flags
 # ------------------------------------------------------------------
-for arg in "$@"; do
-    case "$arg" in
-        --all)
-            _flag_noninteractive=true
-            ;;
-        --hyprland) _desktop="hyprland" ;;
-        --kde)      _desktop="kde"      ;;
-        --dotfiles)
-            _do_multilib=false; _do_aur_helper=false
-            _do_desktop=false; _do_apps=false; _do_greeter=false
-            _do_hooks=false; _do_shell=false; _do_hwfix=false
-            _flag_noninteractive=true
-            ;;
-        --pkgs)
-            _do_multilib=false; _do_greeter=false
-            _do_hooks=false; _do_dotfiles=false; _do_shell=false; _do_hwfix=false
-            _flag_noninteractive=true
-            ;;
-        --desktop-only)
-            # Just the desktop: its packages plus its config. Useful to add or
-            # switch the desktop on a machine that is already set up.
-            _do_multilib=false; _do_aur_helper=false
-            _do_apps=false; _do_greeter=false
-            _do_hooks=false; _do_shell=false; _do_hwfix=false
-            _flag_noninteractive=true
-            ;;
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --all)       _flag_noninteractive=true ;;
+        --hyprland)  _desktop="hyprland" ;;
+        --kde)       _desktop="kde"      ;;
+        --greeter=*) _greeter="${1#*=}"
+                     [[ "$_greeter" =~ ^(sddm|greetd)$ ]] || {
+                         error "--greeter must be sddm or greetd"; exit 1; } ;;
+        --aur-helper=*) _aur_helper="${1#*=}"
+                     [[ "$_aur_helper" =~ ^(yay|paru|both)$ ]] || {
+                         error "--aur-helper must be yay, paru or both"; exit 1; } ;;
+        --only)      _only "$2"; shift ;;
+        --only=*)    _only "${1#*=}" ;;
+        --skip)      _set_steps false "$2"; _flag_noninteractive=true; shift ;;
+        --skip=*)    _set_steps false "${1#*=}"; _flag_noninteractive=true ;;
+
+        # Shorthands kept for the combinations used most often.
+        --dotfiles)     _only dotfiles ;;
+        --pkgs)         _only aur,desktop,apps ;;
+        --desktop-only) _only desktop,dotfiles ;;
+
         -h|--help)
             cat <<EOF
 Usage: setup post <--hyprland|--kde> [options]
 
+Everything except the initial Arch install, which is 'setup install' and only
+runs once from the live ISO. Run it whole or a step at a time.
+
 Desktop (required — pick one):
-    --hyprland     Hyprland + Quickshell: deps-hyprland.conf + deps-quickshell.conf,
-                   dotfiles from dots/common + dots/hyprland
-    --kde          KDE Plasma: deps-kde.conf, dots/common, and the copy-managed
-                   dots/kde profile applied with 'setup kde apply'
+    --hyprland          Hyprland + Quickshell
+    --kde               KDE Plasma
+
+Steps:
+$(for s in "${STEPS[@]}"; do printf '    %s\n' "$(_step_label "$s")"; done)
 
 Options:
-    --all            Run all components without prompting
-    --dotfiles       Only link dotfiles (~/.config symlinks)
-    --pkgs           Only install AUR helper + all packages
-    --desktop-only   Only the chosen desktop: its packages + its config
-    -h, --help       Show this help
+    --all               Run every step without prompting
+    --only a,b,c        Run only these steps
+    --skip a,b          Run everything except these
+    --greeter=sddm      Graphical Qt login with the astronaut theme (default)
+    --greeter=greetd    Console login: greetd + sysc-greet (Cagebreak)
+    --aur-helper=yay    Which helper to install and use (default; or paru, both)
+    -h, --help          Show this help
 
-To undo dotfiles only:
+Examples:
+    setup post --hyprland                 pick steps in a menu
+    setup post --all --hyprland           everything, no prompts
+    setup post --only greeter --hyprland  just the login screen
+    setup post --skip apps,hwfix --kde    everything but those two
+    setup post --only dotfiles --hyprland just the ~/.config symlinks
+
+To undo the dotfiles:
     setup dotfiles <hyprland|kde> --unlink
-
-Interactive mode (default, no flags):
-    A menu lets you pick the desktop and toggle each component before confirming.
 EOF
             exit 0
             ;;
         *)
             # Without this a typo like --hyprlnad would be ignored silently and
             # the run would stop later with a confusing "no desktop chosen".
-            error "Unknown option: $arg"
+            error "Unknown option: $1"
             error "See: setup post --help"
             exit 1
             ;;
     esac
+    shift
 done
 
 # ------------------------------------------------------------------
-# Interactive menu
+# Interactive selection
 # ------------------------------------------------------------------
-_desktop_label() {
-    case "$_desktop" in
-        hyprland) echo "hyprland  (deps-hyprland.conf + deps-quickshell.conf)" ;;
-        kde)      echo "kde       (deps-kde.conf + perfil dots/kde)"           ;;
-        *)        echo "SIN ELEGIR — pulsa 'd'"                               ;;
-    esac
-}
+# whiptail gives real checkboxes on a bare TTY, which is where this runs after a
+# fresh install. has_menu() falls back when it is missing or stdin is a pipe.
+_have_helpers="$(_installed_helpers)"
 
-_print_menu() {
-    echo ""
-    echo -e "${_CLR_BOLD}  Post-instalación${_CLR_RST}"
-    echo ""
-    printf "        Escritorio: %s\n" "$(_desktop_label)"
-    echo ""
-    printf "    [%s] 1  Multilib             (Steam y apps de 32 bits)\n" \
-        "$([[ $_do_multilib    == true ]] && echo "x" || echo " ")"
-    printf "    [%s] 2  AUR helper           (actualmente: %s)\n" \
-        "$([[ $_do_aur_helper    == true ]] && echo "x" || echo " ")" "$_aur_helper"
-    printf "    [%s] 3  Paquetes del escritorio elegido\n" \
-        "$([[ $_do_desktop       == true ]] && echo "x" || echo " ")"
-    printf "    [%s] 4  Apps                 (packages/apps.conf — official + AUR)\n" \
-        "$([[ $_do_apps          == true ]] && echo "x" || echo " ")"
-    printf "    [%s] 5  Display manager     (SDDM + tema astronaut)\n" \
-        "$([[ $_do_greeter       == true ]] && echo "x" || echo " ")"
-    printf "    [%s] 6  Pacman hooks         (packages/hooks/enabled/)\n" \
-        "$([[ $_do_hooks         == true ]] && echo "x" || echo " ")"
-    printf "    [%s] 7  Dotfiles             (~/.config, según el escritorio)\n" \
-        "$([[ $_do_dotfiles      == true ]] && echo "x" || echo " ")"
-    printf "    [%s] 8  Fish como shell por defecto\n" \
-        "$([[ $_do_shell         == true ]] && echo "x" || echo " ")"
-    printf "    [%s] 9  Fixes de hardware      (blacklist mouse Logitech + initramfs)\n" \
-        "$([[ $_do_hwfix         == true ]] && echo "x" || echo " ")"
-    echo ""
-    echo "    d: elegir escritorio  |  Alternar: escribe números (ej: 3 5)"
-    echo "    p/y: cambiar AUR helper  |  Enter: ejecutar  |  0: salir"
-}
+if [[ "$_flag_noninteractive" == false ]] && has_menu; then
+    if [[ -z "$_desktop" ]]; then
+        _desktop="$(menu_radiolist "Desktop" \
+"dots/common is linked either way: kitty, fish, fastfetch, yazi, mpv, starship —\n\
+the terminal and CLI side, identical on both desktops.\n\n\
+This choice is only about the GRAPHICAL side:" \
+            hyprland "Hyprland + Quickshell — bar, launcher, wallpaper, lock" on \
+            kde      "KDE Plasma 6 — full desktop environment"                off)" \
+            || { info "Cancelled."; exit 0; }
+    fi
 
-if [[ "$_flag_noninteractive" == false && -t 0 ]]; then
-    _print_menu
-    while true; do
-        read -rp "  > " _sel
-        [[ -z "$_sel" ]] && break
-        for token in $_sel; do
-            case "$token" in
-                0) echo ""; info "Saliendo sin cambios."; exit 0 ;;
-                1) [[ $_do_multilib     == true ]] && _do_multilib=false     || _do_multilib=true     ;;
-                2) [[ $_do_aur_helper   == true ]] && _do_aur_helper=false   || _do_aur_helper=true   ;;
-                3) [[ $_do_desktop      == true ]] && _do_desktop=false      || _do_desktop=true      ;;
-                4) [[ $_do_apps         == true ]] && _do_apps=false         || _do_apps=true         ;;
-                5) [[ $_do_greeter      == true ]] && _do_greeter=false      || _do_greeter=true      ;;
-                6) [[ $_do_hooks        == true ]] && _do_hooks=false        || _do_hooks=true        ;;
-                7) [[ $_do_dotfiles     == true ]] && _do_dotfiles=false     || _do_dotfiles=true     ;;
-                8) [[ $_do_shell        == true ]] && _do_shell=false        || _do_shell=true        ;;
-                9) [[ $_do_hwfix        == true ]] && _do_hwfix=false        || _do_hwfix=true        ;;
-                # Cycles hyprland -> kde -> hyprland, so it also works as the
-                # initial pick when nothing is set yet.
-                d) [[ "$_desktop" == "hyprland" ]] && _desktop="kde" || _desktop="hyprland" ;;
-                p) _aur_helper="paru" ;;
-                y) _aur_helper="yay"  ;;
-            esac
-        done
-        _print_menu
+    # The AUR step only makes sense as a choice when a helper already exists.
+    # With none installed nothing below step 2 can run, so it is forced on and
+    # the only question is which one to install.
+    if [[ -z "$_have_helpers" ]]; then
+        _do_aur=true
+        _aur_helper="$(menu_radiolist "AUR helper — required" \
+"No AUR helper found. Steps 3 and below install through one, so this cannot be\n\
+skipped. Which do you want?" \
+            yay  "yay  — faster to build, less setup (recommended)" on \
+            paru "paru — nicer output, written in Rust"             off \
+            both "both — install the two of them"                   off)" \
+            || { info "Cancelled."; exit 0; }
+    else
+        # One is already there, so installing is opt-in; the existing one is
+        # what the package steps will use.
+        _do_aur=false
+        _aur_helper="$(echo "$_have_helpers" | head -1)"
+        info "AUR helper found: $(echo "$_have_helpers" | tr '\n' ' ')— using $_aur_helper"
+    fi
+
+    _greeter="$(menu_radiolist "Login screen" \
+"What you see when you boot. Only one can be enabled at a time." \
+        sddm   "SDDM — graphical, themed (astronaut)"      on \
+        greetd "greetd + sysc-greet — console, Cagebreak"  off)" \
+        || { info "Cancelled."; exit 0; }
+
+    # Steps are listed in the order they must run. Each assumes the ones above
+    # are done; unchecking one means "already handled some other way".
+    _items=()
+    for _s in "${STEPS[@]}"; do
+        _v="_do_${_s}"
+        _items+=("$_s" "${STEP_DESC[$_s]}" "$([[ ${!_v} == true ]] && echo on || echo off)")
     done
-    echo ""
+    _chosen="$(menu_checklist "Post-install — $_desktop, $_greeter" \
+"Space toggles · Tab to the buttons · Enter confirms\n\
+Listed in the order they run; each assumes the ones above it." \
+        "${_items[@]}")" || { info "Cancelled."; exit 0; }
+
+    for _s in "${STEPS[@]}"; do declare "_do_${_s}=false"; done
+    while read -r _s; do [[ -n "$_s" ]] && declare "_do_${_s}=true"; done <<<"$_chosen"
+
+    # Unticking the AUR step with no helper installed would make every package
+    # step below fail one by one. Put it back rather than let that happen.
+    if [[ -z "$_have_helpers" && "$_do_aur" == false ]]; then
+        for _s in desktop apps greeter; do
+            _v="_do_${_s}"; [[ ${!_v} == true ]] || continue
+            warn "Re-enabling the AUR step: '$_s' installs packages and no helper exists yet."
+            _do_aur=true
+            break
+        done
+    fi
+
+elif [[ "$_flag_noninteractive" == false && -t 0 ]]; then
+    # whiptail missing: confirm the defaults rather than silently doing everything.
+    echo
+    info "whiptail not available — running with defaults:"
+    for _s in "${STEPS[@]}"; do
+        _v="_do_${_s}"
+        printf "    [%s] %s\n" "$([[ ${!_v} == true ]] && echo x || echo ' ')" "$(_step_label "$_s")"
+    done
+    echo
+    read -rp "  Continue? [y/N] " _yn
+    [[ "$_yn" =~ ^[Yy]$ ]] || { info "Cancelled."; exit 0; }
 fi
 
 # ------------------------------------------------------------------
@@ -197,9 +272,14 @@ fi
 # ------------------------------------------------------------------
 if [[ -z "$_desktop" ]] \
    && { [[ $_do_desktop == true ]] || [[ $_do_dotfiles == true ]]; }; then
-    error "No has elegido escritorio. Usa --hyprland o --kde (o 'd' en el menú)."
+    error "No desktop chosen. Use --hyprland or --kde."
     exit 1
 fi
+
+echo
+info "Desktop: ${_desktop:-none}   Login screen: $_greeter"
+info "Steps: $(for s in "${STEPS[@]}"; do v="_do_$s"; [[ ${!v} == true ]] && printf '%s ' "$s"; done)"
+echo
 
 # Everything below this point can need root, so ask once and keep it alive.
 sudo_keepalive
@@ -214,26 +294,42 @@ if [[ $_do_multilib == true ]]; then
 fi
 
 # ------------------------------------------------------------------
-# 2. AUR helper (paru or yay)
+# 2. AUR helper (yay, paru, or both)
 # ------------------------------------------------------------------
-if [[ $_do_aur_helper == true ]]; then
+# Bootstrapped from source with makepkg, because installing an AUR package is
+# the one thing you cannot do with an AUR helper you do not have yet.
+if [[ $_do_aur == true ]]; then
     step "AUR helper ($_aur_helper)"
 
-    if command -v "$_aur_helper" &>/dev/null; then
-        info "$_aur_helper is already installed, skipping"
-    else
+    case "$_aur_helper" in
+        both) _want_helpers=(yay paru) ;;
+        *)    _want_helpers=("$_aur_helper") ;;
+    esac
+
+    for _h in "${_want_helpers[@]}"; do
+        if command -v "$_h" &>/dev/null; then
+            info "$_h is already installed, skipping"
+            continue
+        fi
         AUR_TMP=$(mktemp -d)
         trap 'rm -rf "$AUR_TMP"; sudo_stop_keepalive' EXIT INT TERM
-        git clone "https://aur.archlinux.org/${_aur_helper}.git" "$AUR_TMP"
+        git clone "https://aur.archlinux.org/${_h}.git" "$AUR_TMP"
         (cd "$AUR_TMP" && makepkg -si --noconfirm)
-        success "$_aur_helper installed"
-    fi
+        rm -rf "$AUR_TMP"
+        success "$_h installed"
+    done
 fi
 
 # ------------------------------------------------------------------
-# helper: resolve paru or yay
+# helper: which AUR helper the package steps below should use
 # ------------------------------------------------------------------
+# Honours the choice made above when it names one, so asking for paru does not
+# silently install through yay just because yay sorts first. With 'both', or
+# when the step was skipped, fall back to whatever is on the system.
 _find_aur_helper() {
+    if [[ "$_aur_helper" != "both" ]] && command -v "$_aur_helper" &>/dev/null; then
+        echo "$_aur_helper"; return
+    fi
     for h in paru yay; do
         command -v "$h" &>/dev/null && { echo "$h"; return; }
     done
@@ -374,78 +470,22 @@ if [[ $_do_apps == true ]]; then
 fi
 
 # ------------------------------------------------------------------
-# 5. Display manager (SDDM + sddm-astronaut-theme)
+# 5. Login screen
 # ------------------------------------------------------------------
 if [[ $_do_greeter == true ]]; then
-    step "Display manager (SDDM + astronaut theme)"
+    step "Login screen ($_greeter)"
 
-    _helper="$(_find_aur_helper)"
-    if [[ -z "$_helper" ]]; then
-        warn "No AUR helper found — skipping the display manager (run step 2 first)"
-    else
-        mapfile -t _greeter_pkgs < <(parse_packages "$REPO_ROOT/packages/deps-greeter.conf")
-        info "Installing ${#_greeter_pkgs[@]} display manager packages..."
-        "$_helper" -S --needed --noconfirm "${_greeter_pkgs[@]}"
-
-        # Theme variant and screen size.
-        #
-        # Both live in files the sddm-astronaut-theme package owns, so an upgrade
-        # resets them. packages/hooks/enabled/sddm-astronaut-theme.hook re-applies
-        # exactly these two edits afterwards — keep the values in sync.
-        _theme_dir="/usr/share/sddm/themes/sddm-astronaut-theme"
-        if [[ -d "$_theme_dir" ]]; then
-            info "Selecting the hyprland_kath variant..."
-            sudo sed -i 's|^ConfigFile=.*|ConfigFile=Themes/hyprland_kath.conf|' \
-                "$_theme_dir/metadata.desktop"
-            sudo sed -i -e 's|^ScreenWidth=.*|ScreenWidth="2560"|' \
-                        -e 's|^ScreenHeight=.*|ScreenHeight="1440"|' \
-                "$_theme_dir/Themes/hyprland_kath.conf"
-        else
-            warn "Theme not found at $_theme_dir — skipping the variant selection"
-        fi
-
-        info "Configuring SDDM..."
-        sudo mkdir -p /etc/sddm.conf.d
-
-        # .conf.d drop-ins rather than /etc/sddm.conf: the latter is a pacman
-        # .pacnew magnet, and drop-ins keep our settings separate from defaults.
-        sudo tee /etc/sddm.conf.d/10-theme.conf > /dev/null <<'CONF'
-# Managed by setup post. See packages/deps-greeter.conf.
-[Theme]
-Current=sddm-astronaut-theme
-CONF
-
-        # The theme's login field expects the Qt virtual keyboard to be available.
-        sudo tee /etc/sddm.conf.d/20-virtualkbd.conf > /dev/null <<'CONF'
-# Managed by setup post.
-[General]
-InputMethod=qtvirtualkeyboard
-CONF
-
-        # Wayland greeter: this box runs Hyprland and Plasma Wayland, and the X11
-        # greeter would pull in a whole Xorg session just to draw the login form.
-        sudo tee /etc/sddm.conf.d/30-wayland.conf > /dev/null <<'CONF'
-# Managed by setup post.
-[General]
-DisplayServer=wayland
-GreeterEnvironment=QT_WAYLAND_SHELL_INTEGRATION=layer-shell
-CONF
-
-        # greetd was the previous display manager. Only one may be enabled: the
-        # display-manager.service symlink points at whichever won.
-        if systemctl is-enabled greetd &>/dev/null; then
-            info "Disabling greetd (kept installed as a fallback)..."
-            sudo systemctl disable greetd
-        fi
-        sudo systemctl enable sddm
-
-        success "SDDM enabled — greetd left installed but disabled"
-    fi
+    # All of it lives in cmd/lib/greeter.sh, so the same code serves
+    # 'setup greeter apply' later — after a monitor layout change, say. It
+    # installs the packages, writes the config, adds the GRUB console entry as
+    # a way back in, and switches display-manager.service.
+    bash "$REPO_ROOT/cmd/lib/greeter.sh" "$_greeter"
 
     # gnome-keyring PAM integration (auto-unlock on login).
-    # /etc/pam.d/login covers TTY logins; /etc/pam.d/sddm covers the graphical
-    # one and is a separate stack, so both need the module.
-    for _pam in /etc/pam.d/login /etc/pam.d/sddm; do
+    # Each of these is a separate PAM stack: /etc/pam.d/login covers TTY logins,
+    # and the display manager has its own. Both greeters are listed so switching
+    # between them does not silently lose the auto-unlock.
+    for _pam in /etc/pam.d/login /etc/pam.d/sddm /etc/pam.d/greetd; do
         if [[ -f "$_pam" ]] && ! grep -q 'pam_gnome_keyring' "$_pam"; then
             info "Configuring gnome-keyring PAM integration in $_pam..."
             sudo sed -i '/^auth.*pam_unix\.so/a auth       optional     pam_gnome_keyring.so' "$_pam"
@@ -473,7 +513,7 @@ ENV
     # XDG desktop portals
     sudo systemctl --global enable xdg-desktop-portal || true
 
-    success "Greeter configured"
+    success "Login screen configured"
 fi
 
 # ------------------------------------------------------------------
@@ -555,4 +595,15 @@ fi
 # ------------------------------------------------------------------
 echo ""
 success "Post-install complete."
-echo "  Log out and back in (or reboot) to start the Hyprland session."
+echo "  Log out and back in (or reboot) to start the session."
+
+# The login screen's output config is generated from ~/.config/hypr/monitors.lua,
+# which does not exist yet on a fresh machine: it is written once the display
+# layout is set in the session, and it is in local.ignore so it never ships with
+# the repo. Until then weston enables every output and the greeter can appear on
+# a screen that is switched off.
+if [[ $_do_greeter == true && ! -f "$HOME/.config/hypr/monitors.lua" ]]; then
+    echo ""
+    warn "Multi-monitor machines: set up your displays in the session first,"
+    warn "then re-run 'setup greeter apply' so the login screen lands on the right one."
+fi

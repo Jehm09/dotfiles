@@ -220,6 +220,32 @@ _sync_git_exclude() {
     } >"$exclude"
 }
 
+# .git/info/exclude only covers UNTRACKED files. Several local.ignore entries are
+# tracked upstream and rewritten at runtime — matugen regenerates colors.lua,
+# hyprlock/colors.conf and fuzzel_theme.ini from the wallpaper on every colour
+# change — so without this they show up as modified forever and `export` would
+# bake one wallpaper's palette into the patches.
+#
+# skip-worktree tells git to ignore local changes to a tracked file. It lives in
+# the index, so `checkout -B mine` clears it and it has to be re-applied after
+# every rebuild.
+_apply_skip_worktree() {
+    [[ -f "$IGNORE_FILE" ]] || return 0
+    local pattern f n=0
+    while read -r pattern; do
+        [[ -z "$pattern" || "$pattern" == \#* ]] && continue
+        # shellcheck disable=SC2231  # unquoted glob expansion is intentional
+        for f in "$CACHE_DIR"/$pattern; do
+            [[ -f "$f" ]] || continue
+            local rel="${f#"$CACHE_DIR"/}"
+            git -C "$CACHE_DIR" ls-files --error-unmatch "$rel" &>/dev/null || continue
+            git -C "$CACHE_DIR" update-index --skip-worktree "$rel" && n=$((n + 1))
+        done
+    done <"$IGNORE_FILE"
+    ((n)) && info "Ignoring runtime changes to $n tracked file(s)"
+    return 0
+}
+
 _unstash_local_files() {
     local src="$1" f rel n=0
     [[ -d "$src" ]] || return 0
@@ -288,6 +314,7 @@ _apply_overlay() {
 
     _unstash_local_files "$stash"
     rm -rf "$stash"
+    _apply_skip_worktree
 
     # Removing every file in a directory leaves the directory behind, since git
     # does not track empty ones. Prune them so the tree matches a clean build.
@@ -492,8 +519,23 @@ cmd_deps() {
     sudo pacman -U --noconfirm "$built"
     echo "$pinned" >"$CACHE_DIR/$_PIN_FILE_REL"
 
+    # makepkg leaves the unpacked quickshell tree and the staged package behind —
+    # around 2.5 GB of C++ sources inside the clone. Upstream gitignores them so
+    # they never show up in `status`, they just sit there; and they make the
+    # clone useless to open in an editor. The built package is kept for reinstalls.
+    info "Cleaning the build tree"
+    rm -rf "$pkgdir/src" "$pkgdir/pkg" "$pkgdir/quickshell"
+
     success "quickshell pinned at ${pinned:0:8}"
     info "Restart the shell to pick it up:  qs -c ii"
+}
+
+# Where to open an editor to work on the shell. Prints the config directory, not
+# the clone root: the root also holds sdata/, which is where makepkg unpacks a
+# couple of gigabytes of quickshell C++ sources during 'deps'.
+cmd_path() {
+    _require_clone
+    echo "$CACHE_DIR/$TRACKED_PREFIX"
 }
 
 cmd_status() {
@@ -575,6 +617,7 @@ EOF
 }
 
 case "${1:-}" in
+    path)   shift; cmd_path   "$@" ;;
     sync)   shift; cmd_sync   "$@" ;;
     apply)  shift; cmd_apply  "$@" ;;
     update) shift; cmd_update "$@" ;;

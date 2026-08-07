@@ -35,8 +35,16 @@ _usage() {
 
 Usage: setup dotfiles <hyprland|kde> [--dry-run] [--unlink]
 
-    hyprland    dots/common + dots/hyprland
-    kde         dots/common  (the Plasma config is applied by 'setup kde apply')
+dots/common is linked either way — kitty, fish, fastfetch, yazi, mpv, starship,
+fontconfig and the browser/editor flag files. Nothing there is tied to a
+compositor, so both desktops get the same terminal and CLI setup.
+
+The argument only decides what is linked ON TOP of that:
+
+    hyprland    + the graphical side: hypr, quickshell, fuzzel, matugen,
+                  Kvantum, wlogout  (from the upstream clone, see setup upstream)
+    kde         + nothing here — Plasma is copy-managed, applied separately
+                  with 'setup kde apply'
 
 EOF
 }

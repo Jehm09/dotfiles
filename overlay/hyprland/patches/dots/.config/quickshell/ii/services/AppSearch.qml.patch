@@ -1,0 +1,36 @@
+diff --git a/dots/.config/quickshell/ii/services/AppSearch.qml b/dots/.config/quickshell/ii/services/AppSearch.qml
+index 358b8d20..bd88c42a 100644
+--- a/dots/.config/quickshell/ii/services/AppSearch.qml
++++ b/dots/.config/quickshell/ii/services/AppSearch.qml
+@@ -95,13 +95,31 @@ Singleton {
+         return str.toLowerCase().replace(/_/g, "-");
+     }
+ 
++    // Cache: the bar calls guessIcon from a binding, once per workspace, so an
++    // unresolved class re-runs the whole chain every frame and stutters the
++    // workspace animation.
++    property var iconGuessCache: ({})
++
+     function guessIcon(str) {
+         if (!str || str.length == 0) return "image-missing";
++        const cached = root.iconGuessCache[str];
++        if (cached !== undefined) return cached;
++        const resolved = root.guessIconUncached(str);
++        root.iconGuessCache[str] = resolved;
++        return resolved;
++    }
+ 
++    function guessIconUncached(str) {
+         // Quickshell's desktop entry lookup
+         const entry = DesktopEntries.byId(str);
+         if (entry) return entry.icon;
+ 
++        // StartupWMClass lookup. Upstream has this last, after two fuzzy
++        // searches; it's exact and cheap, so it belongs here. Electron apps
++        // whose WM class differs from their desktop id resolve on this line.
++        const byWmClass = DesktopEntries.heuristicLookup(str);
++        if (byWmClass) return byWmClass.icon;
++
+         // Normal substitutions
+         if (substitutions[str]) return substitutions[str];
+         if (substitutions[str.toLowerCase()]) return substitutions[str.toLowerCase()];
