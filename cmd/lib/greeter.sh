@@ -20,10 +20,12 @@
 #      successfully". Displays are left alone by default so this repo installs
 #      anywhere; GREETER_OUTPUT pins it to one when you want that.
 #
-#   2. seatd FIGHTS logind FOR THE INPUT DEVICES. greetd needs seatd; SDDM uses
-#      logind. Both enabled gives "Could not take device: Device already taken"
-#      and the greeter never accepts typing. Fixed by disabling seatd for SDDM
-#      and enabling it for greetd.
+#   2. seatd BREAKS BOTH GREETERS. libseat prefers seatd when its socket exists
+#      and does not fall back to logind when the socket is there but unreadable.
+#      /run/seatd.sock is root:seat and greetd's greeter runs as `greeter`, which
+#      is not in that group, so enabling seatd gives "Permission denied" and the
+#      greeter dies on EGL. With SDDM it gives "Device already taken" and input
+#      stops working. logind handles seats on its own; seatd stays off for both.
 #
 #   3. THE POINTER IS INVISIBLE UNDER WESTON. Nothing draws it: weston does not
 #      implement wp_cursor_shape_manager_v1 (which Qt 6 asks for), neither of its
@@ -57,6 +59,7 @@ THEME_VARIANT="hyprland_kath"
 CONF_D="/etc/sddm.conf.d"
 WESTON_INI="/etc/sddm/weston.ini"
 GREETD_CONF="/etc/greetd/config.toml"
+CAGEBREAK_CONF="/etc/greetd/cagebreak-greeter-config"
 
 # SDDM draws no pointer at all unless told which theme to use — there is no
 # fallback, it is simply invisible. Matches what Hyprland sets in
@@ -129,6 +132,36 @@ _require_rescue() {
 # QScreen it is given, so the only lever is which outputs the compositor exposes.
 # Each compositor needs a different file, and neither is something SDDM knows
 # about.
+# Put the greeter on one output, by raising that output's priority.
+#
+# Only `prio`. Not `disable`, and not `pos/res/rate`:
+#   output <other> disable  -> the greeter exits with
+#                              "EGL: Failed to initialize EGL" and greetd loops.
+#                              Reproduced on this machine; cause not understood.
+#   output <name> pos ... res ... rate ...  -> same failure.
+# `prio <n>` leaves every output enabled and only reorders them, and the greeter
+# lands on the first. The others stay lit — that is the trade-off for a greeter
+# that actually starts.
+_cagebreak_restrict() {
+    local keep="$1"
+    local block
+
+    block="# >>> setup greeter: outputs"$'\n'
+    block+="output $keep prio 10"$'\n'
+    block+="# <<< setup greeter: outputs"$'\n'
+
+    sudo awk -v block="$block" '
+        /^# >>> setup greeter: outputs/ { skip = 1 }
+        skip && /^# <<< setup greeter: outputs/ { skip = 0; next }
+        skip { next }
+        !done && /^exec / { printf "%s", block; done = 1 }
+        { print }
+        END { if (!done) printf "%s", block }
+    ' "$CAGEBREAK_CONF" | sudo tee "$CAGEBREAK_CONF.tmp" >/dev/null
+    sudo mv "$CAGEBREAK_CONF.tmp" "$CAGEBREAK_CONF"
+    success "cagebreak: greeter on $keep (other outputs stay enabled)"
+}
+
 _restrict_output() {
     local keep="$1"
     local connected=()
@@ -141,6 +174,11 @@ _restrict_output() {
     if [[ " ${connected[*]} " != *" $keep "* ]]; then
         error "Output '$keep' is not connected. Connected: ${connected[*]}"
         exit 1
+    fi
+
+    if [[ "$(_active_dm)" == greetd ]]; then
+        _cagebreak_restrict "$keep"
+        return 0
     fi
 
     case "$GREETER_COMPOSITOR" in
@@ -315,27 +353,68 @@ cmd_sddm() {
 # ------------------------------------------------------------------
 # greetd + sysc-greet (Cagebreak)
 # ------------------------------------------------------------------
+# Unlock the login keyring with the login password.
+#
+# Appends after the LAST auth/session line rather than after pam_unix: greetd's
+# stack has no pam_unix of its own, it does `include system-local-login`, so
+# anchoring on pam_unix silently does nothing. Without this you get a password
+# prompt from gnome-keyring on every login.
+_pam_keyring() {
+    local f="$1"
+    [[ -f "$f" ]] || return 0
+    grep -q pam_gnome_keyring "$f" && return 0
+
+    sudo awk '
+        { lines[NR] = $0 }
+        /^auth/    { last_auth = NR }
+        /^session/ { last_session = NR }
+        END {
+            for (i = 1; i <= NR; i++) {
+                print lines[i]
+                if (i == last_auth)    print "auth       optional     pam_gnome_keyring.so"
+                if (i == last_session) print "session    optional     pam_gnome_keyring.so auto_start"
+            }
+        }
+    ' "$f" | sudo tee "$f.tmp" >/dev/null
+    sudo mv "$f.tmp" "$f"
+    success "gnome-keyring unlock added to $f"
+}
+
 _greetd_configure() {
     step "greetd configuration"
     sudo mkdir -p "$(dirname "$GREETD_CONF")"
+
+    if [[ -n "$GREETER_OUTPUT" && -f "$CAGEBREAK_CONF" ]]; then
+        _cagebreak_restrict "$GREETER_OUTPUT"
+    fi
+    # Matches what the upstream installer writes
+    # (https://github.com/Nomadcxx/sysc-greet). greetd launches cagebreak; the
+    # cagebreak config exec's the greeter. -e enables the IPC socket used to quit
+    # cagebreak after login, which is why socat is a dependency.
     sudo tee "$GREETD_CONF" >/dev/null <<'TOML'
 # Managed by 'setup greeter apply'.
 [terminal]
 vt = 1
 
 [default_session]
-# sysc-greet, Cagebreak variant: the greeter runs inside Cagebreak, a tiny
-# tiling Wayland compositor. https://github.com/b1rger/sysc-greet
-command = "sysc-greet-cagebreak"
+command = "cagebreak -e -c /etc/greetd/cagebreak-greeter-config"
+user = "greeter"
+
+[initial_session]
+command = "cagebreak -e -c /etc/greetd/cagebreak-greeter-config"
 user = "greeter"
 TOML
     success "Wrote $GREETD_CONF"
 
-    step "seatd"
-    # The mirror image of the SDDM case: greetd needs seatd, SDDM must not have it.
-    sudo systemctl enable --now seatd
-    id -nG "$USER" | grep -qw seat || sudo usermod -aG seat "$USER"
-    success "seatd enabled and \$USER in the 'seat' group"
+    step "Keyring"
+    _pam_keyring /etc/pam.d/greetd
+
+    # seatd is deliberately not touched. The upstream installer does not use it
+    # and logind handles seats on its own. Enabling it breaks the greeter:
+    # /run/seatd.sock is root:seat, greetd's greeter runs as `greeter` which is
+    # not in that group, and libseat does not fall back to logind when the socket
+    # exists but is unreadable — it fails with "Permission denied" and cagebreak
+    # dies on EGL.
 }
 
 cmd_greetd() {
@@ -425,14 +504,98 @@ cmd_status() {
             grep -E '^command' "$GREETD_CONF" | sed 's/^/      /'
         }
         systemctl is-enabled seatd &>/dev/null \
-            && success "seatd enabled (correct for greetd)" \
-            || warn "seatd is disabled — greetd needs it."
+            && error "seatd is enabled — the greeter cannot read its socket and will fail on EGL. Disable it." \
+            || success "seatd disabled (logind handles seats)"
         ;;
     *)
         warn "No display manager enabled."
         ;;
     esac
     echo
+}
+
+# Pre-flight: everything that has ever broken this greeter, checked without
+# changing a thing. Run it before switching display manager.
+cmd_check() {
+    local fail=0
+    echo
+
+    step "greetd config"
+    local cmd bin
+    cmd="$(grep -m1 '^command' "$GREETD_CONF" 2>/dev/null | cut -d'"' -f2)"
+    bin="${cmd%% *}"
+    if [[ -z "$cmd" ]]; then
+        error "No command in $GREETD_CONF"; fail=1
+    elif command -v "$bin" &>/dev/null || [[ -x "$bin" ]]; then
+        success "command: $cmd"
+    else
+        error "command names '$bin', which does not exist"; fail=1
+    fi
+
+    step "Binaries the greeter session runs"
+    local b
+    for b in cagebreak kitty socat gslapper /usr/local/bin/sysc-greet; do
+        if command -v "$b" &>/dev/null || [[ -x "$b" ]]; then
+            success "$(basename "$b")"
+        else
+            error "$(basename "$b") missing"; fail=1
+        fi
+    done
+
+    step "Cagebreak config parses"
+    if [[ -f "$CAGEBREAK_CONF" ]]; then
+        if timeout 5 cagebreak -c "$CAGEBREAK_CONF" -s &>/dev/null; then
+            success "$CAGEBREAK_CONF accepted"
+        else
+            error "cagebreak rejects $CAGEBREAK_CONF"; fail=1
+        fi
+    fi
+
+    step "Seat access"
+    # The greeter runs as `greeter`. libseat prefers seatd when its socket exists
+    # and will NOT fall back to logind if it cannot read it.
+    if systemctl is-enabled seatd &>/dev/null; then
+        if id -nG greeter 2>/dev/null | grep -qw seat; then
+            success "seatd enabled and greeter is in the seat group"
+        else
+            error "seatd is enabled but greeter is not in the seat group"
+            error "  the greeter will fail: Permission denied on /run/seatd.sock"
+            error "  fix: sudo systemctl disable --now seatd"
+            fail=1
+        fi
+    else
+        success "seatd disabled (logind handles seats)"
+    fi
+
+    step "Outputs"
+    local o connected
+    connected="$(_connected_outputs | tr '\n' ' ')"
+    echo "      connected: $connected"
+    for o in $(grep -oP '^output \K[A-Za-z0-9-]+' "$CAGEBREAK_CONF" 2>/dev/null); do
+        if [[ " $connected " == *" $o "* ]]; then
+            success "$o is connected"
+        else
+            warn "$o is in the config but not connected"
+        fi
+    done
+
+    step "Keyring"
+    grep -q pam_gnome_keyring /etc/pam.d/greetd 2>/dev/null \
+        && success "pam_gnome_keyring present in /etc/pam.d/greetd" \
+        || warn "no pam_gnome_keyring — you will be asked for the keyring password"
+
+    step "Way back in"
+    [[ -f /boot/grub/custom.cfg ]] \
+        && success "GRUB console entry present" \
+        || { error "no GRUB console entry — run 'setup grub rescue' first"; fail=1; }
+
+    echo
+    if [[ $fail -eq 0 ]]; then
+        success "All checks passed. Safe to: sudo systemctl disable sddm && sudo systemctl enable --now greetd"
+    else
+        error "Fix the errors above before switching."
+        return 1
+    fi
 }
 
 _usage() {
@@ -445,6 +608,7 @@ Usage: setup greeter <subcommand>
     apply     Re-apply the config of whichever is active
               (run after changing the monitor layout)
     test      Preview the SDDM theme in a window, changing nothing
+    check     Validate the greetd setup without changing anything
     status    Which one is active, and what would break
 
 Only one may be enabled: display-manager.service is a single symlink. Both
@@ -459,6 +623,7 @@ case "${1:-}" in
     greetd) shift; cmd_greetd "$@" ;;
     apply)  shift; cmd_apply  "$@" ;;
     test)   shift; cmd_test   "$@" ;;
+    check)  shift; cmd_check  "$@" ;;
     status) shift; cmd_status "$@" ;;
     -h|--help|help|"") _usage ;;
     *) error "Unknown subcommand: $1"; _usage; exit 1 ;;
