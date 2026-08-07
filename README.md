@@ -16,7 +16,7 @@ their bugfixes never arrived, and anything that broke was mine to fix. Now:
 
 - **end-4's version is the base.** It is cloned to
   `$XDG_DATA_HOME/dotfiles/upstream`, outside git, and updates come from him.
-- **This repo stores only the delta**: ~50 patches, 14 files of my own, and a
+- **This repo stores only the delta**: ~51 patches, 13 files of my own, and a
   list of things I delete (the AI assistant, the `waffle` panel family, Google
   Cloud services, the translations). Around 2,000 lines instead of 80,000.
 - **Updating is a real git three-way merge.** Conflicts can only happen in files
@@ -541,8 +541,8 @@ THIS REPO (what I version)              THE CLONE (35 MB, outside git)
 dotfiles/                               ~/.local/share/dotfiles/upstream/
 ├── overlay/hyprland/                   ├── setup, sdata, dots-extra…  (end-4's)
 │   ├── upstream.lock  the commit       └── dots/.config/
-│   ├── patches/       ~50 diffs             ├── hypr/
-│   ├── files/         14 of mine   ──┐     ├── quickshell/ii/
+│   ├── patches/       ~51 diffs             ├── hypr/
+│   ├── files/         13 of mine   ──┐     ├── quickshell/ii/
 │   ├── remove.list    219 deletions  │     ├── fuzzel/ matugen/ Kvantum/ …
 │   └── local.ignore   per-machine    │     └── kitty/ foot/ fish/  ← never linked
 ├── dots/common/                       │
@@ -722,8 +722,21 @@ built by `setup post` from `packages/requirements.txt` into
 
 ## Credits
 
-The Hyprland and Quickshell configuration is based on
-[dots-hyprland by end-4](https://github.com/end-4/dots-hyprland).
-Several components have been removed, others added, and the rest adapted to fit
-this setup — it is not a straight copy of the original.
+The Hyprland and Quickshell interface is
+**[dots-hyprland by end-4](https://github.com/end-4/dots-hyprland)** — his work,
+his design, pulled straight from his repository and used as the base. It is not
+a fork and it is not vendored here: the code is cloned from upstream at install
+time, and updates come from him.
+
+What this repository adds is a thin layer on top: about 51 patches, 13 files of
+my own, and a list of parts I remove (the AI assistant, the `waffle` panel
+family, Google Cloud services, upstream's translations). Roughly 2,000 lines
+against his 80,000. Every file not in that layer is his, unmodified.
+
+Credit for how the shell looks and works belongs to end-4. If you want it, get
+it from [his repository](https://github.com/end-4/dots-hyprland) — and consider
+[sponsoring him](https://github.com/sponsors/end-4).
+
+The rest — the Arch installer, the package lists, the symlink and overlay
+managers, the KDE profile — is mine.
 
