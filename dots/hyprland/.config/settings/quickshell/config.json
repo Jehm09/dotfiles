@@ -103,8 +103,8 @@
         "showOnlyWhenLocked": false,
         "style": "cookie",
         "styleLocked": "cookie",
-        "x": 2286.60546875,
-        "y": 128.1640625
+        "x": 2281.2734375,
+        "y": 98.36328125
       },
       "weather": {
         "enable": false,
@@ -230,7 +230,7 @@
         "name": "HDMI-A-2"
       },
       {
-        "enabled": false,
+        "enabled": true,
         "height": 1080,
         "name": "DP-4",
         "refreshRate": 74.99,
