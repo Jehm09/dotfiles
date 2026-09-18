@@ -10,16 +10,34 @@ ContentPage {
     id: root
     forceWidth: true
 
+    // Monitor identity: the EDID description, not the connector name.
+    //
+    // Connector names (DP-3, HDMI-A-1...) are assigned by the kernel and are not
+    // stable: a GPU driver update renumbers them, and so does moving the cable to
+    // another port. The EDID description comes from the monitor itself, so it
+    // survives both. `name` is still stored as the last seen port — it is the
+    // fallback for monitors with no readable EDID, and what lets old
+    // name-keyed configs keep working.
+    function monitorKey(m) {
+        if (!m) return "";
+        return (m.description && m.description !== "") ? m.description : m.name;
+    }
+
+    function detectedByName(name) {
+        return (HyprlandData.allMonitors || []).find(m => m.name === name) || null;
+    }
+
     // Ordered monitor list: saved order first (still-detected), then any
-    // newly-detected monitor not yet in the saved order.
+    // newly-detected monitor not yet in the saved order. Saved entries may be a
+    // description (current format) or a connector name (older configs).
     property var orderedMonitors: {
         const detected = HyprlandData.allMonitors || [];
         const saved = Config.options.display.order || [];
         const result = [];
         const seen = {};
         for (let i = 0; i < saved.length; i++) {
-            const m = detected.find(d => d.name === saved[i]);
-            if (m) { result.push(m); seen[m.name] = true; }
+            const m = detected.find(d => root.monitorKey(d) === saved[i] || d.name === saved[i]);
+            if (m && !seen[m.name]) { result.push(m); seen[m.name] = true; }
         }
         for (let i = 0; i < detected.length; i++) {
             const m = detected[i];
@@ -30,30 +48,51 @@ ContentPage {
 
     function monitorConfig(name) {
         const list = Config.options.display.monitors || [];
+        const det = root.detectedByName(name);
+        const desc = det ? (det.description || "") : "";
+        if (desc !== "") {
+            for (let i = 0; i < list.length; i++) {
+                if (list[i] && list[i].desc === desc) return list[i];
+            }
+        }
         for (let i = 0; i < list.length; i++) {
-            if (list[i].name === name) return list[i];
+            if (list[i] && list[i].name === name) return list[i];
         }
         return null;
     }
 
     function upsertMonitor(name, patch) {
         const list = (Config.options.display.monitors || []).slice();
-        const idx = list.findIndex(m => m && m.name === name);
+        const det = root.detectedByName(name);
+        const desc = det ? (det.description || "") : "";
+        let idx = -1;
+        if (desc !== "") idx = list.findIndex(m => m && m.desc === desc);
+        if (idx < 0) idx = list.findIndex(m => m && m.name === name);
+        // Persist `desc` and refresh `name`, so the entry keeps following the
+        // monitor after the connector is renumbered.
+        const identity = (desc !== "") ? { name: name, desc: desc } : { name: name };
         if (idx >= 0) {
-            list[idx] = Object.assign({}, list[idx], patch);
+            list[idx] = Object.assign({}, list[idx], patch, identity);
         } else {
-            list.push(Object.assign({ name: name }, patch));
+            list.push(Object.assign({}, identity, patch));
         }
         Config.options.display.monitors = list;
     }
 
     function moveInOrder(name, delta) {
-        const detectedNames = (HyprlandData.allMonitors || []).map(m => m.name);
-        let arr = (Config.options.display.order || []).slice().filter(n => detectedNames.indexOf(n) >= 0);
-        for (let i = 0; i < detectedNames.length; i++) {
-            if (arr.indexOf(detectedNames[i]) < 0) arr.push(detectedNames[i]);
+        const detected = HyprlandData.allMonitors || [];
+        const keys = detected.map(m => root.monitorKey(m));
+        let arr = (Config.options.display.order || [])
+            .map(entry => {
+                const m = detected.find(d => root.monitorKey(d) === entry || d.name === entry);
+                return m ? root.monitorKey(m) : null;
+            })
+            .filter(k => k !== null);
+        arr = arr.filter((k, i) => arr.indexOf(k) === i);
+        for (let i = 0; i < keys.length; i++) {
+            if (arr.indexOf(keys[i]) < 0) arr.push(keys[i]);
         }
-        const idx = arr.indexOf(name);
+        const idx = arr.indexOf(root.monitorKey(detected.find(m => m.name === name)));
         if (idx < 0) return;
         const j = idx + delta;
         if (j < 0 || j >= arr.length) return;
@@ -61,6 +100,39 @@ ContentPage {
         arr[idx] = arr[j];
         arr[j] = tmp;
         Config.options.display.order = arr;
+    }
+
+    // Fills in `desc` on entries that only carry a connector name, and refreshes
+    // `name` when the connector was renumbered. Writes only when something
+    // actually changed, so it converges in one pass.
+    function syncMonitorIdentities() {
+        const detected = HyprlandData.allMonitors || [];
+        if (detected.length === 0) return;
+        const list = (Config.options.display.monitors || []).slice();
+        let changed = false;
+        for (let i = 0; i < list.length; i++) {
+            const e = list[i];
+            if (!e) continue;
+            let det = e.desc ? (detected.find(d => d.description === e.desc) || null) : null;
+            if (!det) det = detected.find(d => d.name === e.name) || null;
+            if (!det) continue;
+            const desc = det.description || "";
+            if (desc !== "" && e.desc !== desc) {
+                list[i] = Object.assign({}, e, { desc: desc, name: det.name });
+                changed = true;
+            } else if (e.name !== det.name) {
+                list[i] = Object.assign({}, e, { name: det.name });
+                changed = true;
+            }
+        }
+        if (changed) Config.options.display.monitors = list;
+    }
+
+    Component.onCompleted: root.syncMonitorIdentities()
+
+    Connections {
+        target: HyprlandData
+        function onAllMonitorsChanged() { root.syncMonitorIdentities(); }
     }
 
     function parseModeString(modeStr) {

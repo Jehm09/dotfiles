@@ -31,7 +31,14 @@ done
 [[ -f "$CONFIG_JSON" ]] || { echo "[display/apply-workspaces] falta $CONFIG_JSON" >&2; exit 1; }
 
 GROUP_SIZE=$(jq -r '.display.workspaces.perMonitor // 5' "$CONFIG_JSON")
+
+# MONITORS: nombre de conector actual, para comparar contra lo que reporta
+# hyprctl (ORIG_MON). SELECTORS: "desc:<EDID>", que es lo que va dentro de las
+# reglas para que sigan siendo válidas si el conector cambia de nombre —
+# actualización de driver o cable movido de puerto. Ver ../env.sh.
 mapfile -t MONITORS < <(enabled_monitors_ordered)
+mapfile -t SELECTORS < <(enabled_monitor_selectors_ordered)
+[[ ${#SELECTORS[@]} -eq ${#MONITORS[@]} ]] || SELECTORS=("${MONITORS[@]}")
 
 NUM=${#MONITORS[@]}
 if (( NUM == 0 )); then
@@ -50,10 +57,10 @@ ORIG_MON=$(hyprctl -j activeworkspace 2>/dev/null | jq -r '.monitor // empty')
     echo "-- NO EDITAR A MANO: cualquier cambio se sobreescribe al guardar display."
     echo ""
     for m_idx in "${!MONITORS[@]}"; do
-        mon="${MONITORS[$m_idx]}"
+        sel="${SELECTORS[$m_idx]}"
         for s in $(seq 1 "$GROUP_SIZE"); do
             ws=$(( m_idx * GROUP_SIZE + s ))
-            echo "hl.workspace_rule({ workspace = \"${ws}\", monitor = \"${mon}\", persistent = true })"
+            echo "hl.workspace_rule({ workspace = \"${ws}\", monitor = \"${sel}\", persistent = true })"
         done
     done
 } > "${WORKSPACES_LUA}.tmp" && mv "${WORKSPACES_LUA}.tmp" "$WORKSPACES_LUA"
@@ -61,11 +68,11 @@ ORIG_MON=$(hyprctl -j activeworkspace 2>/dev/null | jq -r '.monitor // empty')
 # 2) Aplicar reglas vía dispatch + armar set target para el cleanup.
 declare -A TARGET_WS
 for m_idx in "${!MONITORS[@]}"; do
-    mon="${MONITORS[$m_idx]}"
+    sel="${SELECTORS[$m_idx]}"
     for s in $(seq 1 "$GROUP_SIZE"); do
         ws=$(( m_idx * GROUP_SIZE + s ))
         hyprctl eval \
-            "hl.workspace_rule({workspace = \"${ws}\", monitor = \"${mon}\", persistent = true})" \
+            "hl.workspace_rule({workspace = \"${ws}\", monitor = \"${sel}\", persistent = true})" \
             >/dev/null 2>&1
         TARGET_WS[$ws]=1
     done

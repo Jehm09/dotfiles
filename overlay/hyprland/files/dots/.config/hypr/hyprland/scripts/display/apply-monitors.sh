@@ -10,6 +10,11 @@
 #      durante el parseo del config (sin pasar por modo "preferred" default —
 #      esa era la causa del parpadeo de DP-2).
 #
+# Los monitores se identifican por `desc:<descripción EDID>`, no por nombre de
+# conector: ver el comentario en ../env.sh. Así el .lua generado sigue siendo
+# válido aunque el kernel renombre los conectores (actualización de driver) o
+# muevas el cable a otro puerto, sin tener que regenerarlo.
+#
 # Sólo se invoca desde watch.sh cuando el JSON cambia. monitors.lua NO debe
 # llamarlo: ese archivo guarda la última config y se evalúa solo.
 
@@ -18,23 +23,39 @@ source "$(dirname "${BASH_SOURCE[0]}")/../env.sh"
 MONITORS_LUA="${HYPR_DIR}/monitors.lua"
 [[ -f "$CONFIG_JSON" ]] || { echo "[display/apply-monitors] falta $CONFIG_JSON" >&2; exit 1; }
 
+CURRENT=$(live_monitors_json)
+
+# Un registro por monitor: selector estable, nombre de conector actual (para
+# diffear contra hyprctl) y los ajustes guardados.
+#
+# Ningún campo puede quedar vacío: el tab es whitespace para IFS, así que dos
+# tabs seguidos colapsarían en uno y correrían todas las columnas siguientes.
+records() {
+    jq -r --argjson live "$CURRENT" "$_JQ_MONITOR_LIB"'
+        (.display.monitors // [])[]
+        | [ (selector_of(.; $live) | if . == "" then "-" else . end),
+            (name_of(.; $live) | if . == "" then "-" else . end),
+            (.width // 0), (.height // 0), (.refreshRate // 0),
+            (.x // 0), (.y // 0), (.scale // 1),
+            (if .enabled == false then "false" else "true" end) ]
+        | @tsv' "$CONFIG_JSON"
+}
+
 # 1) Regenerar monitors.lua atómicamente con hl.monitor({...}) literales.
 {
     echo "-- Auto-generado por hyprland/scripts/display/apply-monitors.sh"
     echo "-- Fuente: ~/.config/settings/quickshell/config.json"
     echo "-- NO EDITAR A MANO: cualquier cambio se sobreescribe al guardar display."
     echo ""
-    jq -r '.display.monitors[] |
-        if .enabled == false then
-            "hl.monitor({ output = \"\(.name)\", disabled = true })"
+    while IFS=$'\t' read -r sel name w h hz x y scale enabled; do
+        [[ -z "$sel" ]] && continue
+        if [[ "$enabled" == "false" ]]; then
+            echo "hl.monitor({ output = \"${sel}\", disabled = true })"
         else
-            "hl.monitor({ output = \"\(.name)\", mode = \"\(.width)x\(.height)@\(.refreshRate)\", position = \"\(.x)x\(.y)\", scale = \(.scale // 1) })"
-        end
-    ' "$CONFIG_JSON"
+            echo "hl.monitor({ output = \"${sel}\", mode = \"${w}x${h}@${hz}\", position = \"${x}x${y}\", scale = ${scale} })"
+        fi
+    done < <(records)
 } > "${MONITORS_LUA}.tmp" && mv "${MONITORS_LUA}.tmp" "$MONITORS_LUA"
-
-# 2) Dispatch a Hyprland — sólo lo que difiera del estado actual.
-CURRENT=$(hyprctl -j monitors all 2>/dev/null || echo '[]')
 
 # diff_gt a b eps -> retorna 0 (true) si |a-b| > eps.
 diff_gt() {
@@ -72,18 +93,18 @@ needs_change() {
     return 1
 }
 
-jq -r '.display.monitors[] | "\(.name)|\(.width)|\(.height)|\(.refreshRate)|\(.x)|\(.y)|\(.scale // 1)|\(if .enabled == false then "false" else "true" end)"' \
-    "$CONFIG_JSON" | while IFS='|' read -r name w h hz x y scale enabled; do
-    [[ -z "$name" ]] && continue
+# 2) Dispatch a Hyprland — sólo lo que difiera del estado actual.
+while IFS=$'\t' read -r sel name w h hz x y scale enabled; do
+    [[ -z "$sel" ]] && continue
     needs_change "$name" "$w" "$h" "$hz" "$x" "$y" "$scale" "$enabled" || continue
 
     if [[ "$enabled" == "false" ]]; then
-        hyprctl eval "hl.monitor({output = \"$name\", disabled = true})" >/dev/null 2>&1
+        hyprctl eval "hl.monitor({output = \"$sel\", disabled = true})" >/dev/null 2>&1
     else
         scale_f=$(awk -v s="$scale" 'BEGIN { printf "%.6f", s }')
         # disabled = false explícito para reactivar monitores previamente disabled.
         hyprctl eval \
-            "hl.monitor({output = \"$name\", mode = \"${w}x${h}@${hz}\", position = \"${x}x${y}\", scale = $scale_f, disabled = false})" \
+            "hl.monitor({output = \"$sel\", mode = \"${w}x${h}@${hz}\", position = \"${x}x${y}\", scale = $scale_f, disabled = false})" \
             >/dev/null 2>&1
     fi
-done
+done < <(records)
