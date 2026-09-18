@@ -82,7 +82,11 @@ CURSOR_SIZE="24"
 # might come up on the wrong monitor. Set GREETER_COMPOSITOR=weston to swap.
 GREETER_COMPOSITOR="${GREETER_COMPOSITOR:-kwin}"
 
-# Restrict the greeter to one output, e.g. GREETER_OUTPUT=DP-5.
+# Restrict the greeter to one output. Takes a connector name (GREETER_OUTPUT=DP-5)
+# or a monitor description (GREETER_OUTPUT="Samsung Electric Company LC32G5xT
+# HNTT800017"); under greetd a connector name is converted to the description
+# before being saved, because connector names move — a GPU driver update
+# renumbers them, and so does swapping the cable to another port.
 #
 # EMPTY BY DEFAULT ON PURPOSE. SDDM renders the theme on every connected screen
 # — that is SDDM core behaviour, not the theme — and leaving the displays alone
@@ -132,9 +136,16 @@ _require_rescue() {
 # QScreen it is given, so the only lever is which outputs the compositor exposes.
 # Each compositor needs a different file, and neither is something SDDM knows
 # about.
-# Put the greeter on one output, by raising that output's priority.
+# Put the greeter on one output.
 #
-# Only `prio`. Not `disable`, and not `pos/res/rate`:
+# The pin is stored as the monitor's EDID description, and turned into whatever
+# connector that monitor has at the moment the greeter starts — cagebreak can
+# only address outputs by name, and names move. Writing `output DP-5 prio 10`
+# into a file once is how the login screen ended up on a TV that is normally off
+# after nvidia-open renumbered DP-4/DP-5 into DP-2/DP-3.
+#
+# Only `prio` is ever emitted (by the launcher). Not `disable`, and not
+# pos/res/rate:
 #   output <other> disable  -> the greeter exits with
 #                              "EGL: Failed to initialize EGL" and greetd loops.
 #                              Reproduced on this machine; cause not understood.
@@ -142,30 +153,83 @@ _require_rescue() {
 # `prio <n>` leaves every output enabled and only reorders them, and the greeter
 # lands on the first. The others stay lit — that is the trade-off for a greeter
 # that actually starts.
-_cagebreak_restrict() {
-    local keep="$1"
-    local block
+GREETD_OUTPUT_FILE=/etc/greetd/greeter-output
+GREETD_LAUNCHER=/usr/local/bin/greeter-start-cagebreak
+GREETD_RESOLVER=/usr/local/bin/greeter-resolve-output
 
-    block="# >>> setup greeter: outputs"$'\n'
-    block+="output $keep prio 10"$'\n'
-    block+="# <<< setup greeter: outputs"$'\n'
+_install_greeter_helpers() {
+    local src="$DOTFILES_DIR/cmd/greeter"
+    sudo install -Dm755 "$src/greeter-resolve-output" "$GREETD_RESOLVER"
+    sudo install -Dm755 "$src/greeter-start-cagebreak" "$GREETD_LAUNCHER"
+}
 
-    sudo awk -v block="$block" '
-        /^# >>> setup greeter: outputs/ { skip = 1 }
-        skip && /^# <<< setup greeter: outputs/ { skip = 0; next }
-        skip { next }
-        !done && /^exec / { printf "%s", block; done = 1 }
-        { print }
-        END { if (!done) printf "%s", block }
-    ' "$CAGEBREAK_CONF" | sudo tee "$CAGEBREAK_CONF.tmp" >/dev/null
-    sudo mv "$CAGEBREAK_CONF.tmp" "$CAGEBREAK_CONF"
-    success "cagebreak: greeter on $keep (other outputs stay enabled)"
+# Connector name -> EDID description. Passes anything it cannot look up straight
+# through: it is probably already a description.
+_output_description() {
+    local want="$1" desc
+    desc=$(hyprctl -j monitors all 2>/dev/null \
+        | jq -r --arg n "$want" '.[] | select(.name == $n) | .description // empty' 2>/dev/null \
+        | head -1)
+    [[ -n "$desc" ]] && { echo "$desc"; return 0; }
+    echo "$want"
+}
+
+# A GREETER_OUTPUT spec — one or more entries separated by ';', most wanted
+# first — as one description per line.
+_output_descriptions() {
+    local entry
+    while IFS= read -r entry; do
+        [[ -n "$entry" ]] || continue
+        _output_description "$entry"
+    done < <(printf '%s\n' "$1" | tr ';' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+}
+
+# Takes descriptions, most wanted first. Cagebreak cannot mirror, so the greeter
+# still lands on one screen: the first that is connected. The rest are the
+# fallback chain.
+_greetd_pin_output() {
+    local desc
+    {
+        echo "# Monitors the greeter prefers, most wanted first."
+        echo "# Managed by 'setup greeter apply'. These are EDID descriptions:"
+        echo "# the connector name they map to is resolved at every greeter start."
+        printf '%s\n' "$@"
+    } | sudo tee "$GREETD_OUTPUT_FILE" >/dev/null
+
+    # The launcher emits the output lines now, so drop any block a previous
+    # version wrote into the base config.
+    [[ -f "$CAGEBREAK_CONF" ]] && sudo sed -i \
+        '/^# >>> setup greeter: outputs$/,/^# <<< setup greeter: outputs$/d' "$CAGEBREAK_CONF"
+
+    for desc in "$@"; do
+        if "$GREETD_RESOLVER" "$desc" >/dev/null 2>&1; then
+            success "greeter prefers '$desc' (now $("$GREETD_RESOLVER" "$desc"))"
+        else
+            warn "'$desc' is not connected right now — kept, it resolves when it is back"
+        fi
+    done
+}
+
+_greetd_unpin_output() {
+    sudo rm -f "$GREETD_OUTPUT_FILE"
+    [[ -f "$CAGEBREAK_CONF" ]] && sudo sed -i \
+        '/^# >>> setup greeter: outputs$/,/^# <<< setup greeter: outputs$/d' "$CAGEBREAK_CONF"
+    success "greetd: not pinned — the greeter lands on the first enabled output"
 }
 
 _restrict_output() {
     local keep="$1"
     local connected=()
     mapfile -t connected < <(_connected_outputs)
+
+    # greetd resolves the pin itself, at every greeter start, and accepts a
+    # description as well as a connector name — so it skips the name check.
+    if [[ "$(_active_dm)" == greetd ]]; then
+        local -a descs=()
+        mapfile -t descs < <(_output_descriptions "$keep")
+        _greetd_pin_output "${descs[@]}"
+        return 0
+    fi
 
     if [[ ${#connected[@]} -eq 0 ]]; then
         warn "Could not read the connected outputs from /sys/class/drm — skipping."
@@ -174,11 +238,6 @@ _restrict_output() {
     if [[ " ${connected[*]} " != *" $keep "* ]]; then
         error "Output '$keep' is not connected. Connected: ${connected[*]}"
         exit 1
-    fi
-
-    if [[ "$(_active_dm)" == greetd ]]; then
-        _cagebreak_restrict "$keep"
-        return 0
     fi
 
     case "$GREETER_COMPOSITOR" in
@@ -384,24 +443,39 @@ _greetd_configure() {
     step "greetd configuration"
     sudo mkdir -p "$(dirname "$GREETD_CONF")"
 
-    if [[ -n "$GREETER_OUTPUT" && -f "$CAGEBREAK_CONF" ]]; then
-        _cagebreak_restrict "$GREETER_OUTPUT"
+    _install_greeter_helpers
+
+    # Output selection — opt-in only, see GREETER_OUTPUT. Stored as a
+    # description; the launcher turns it into a connector name at each start.
+    if [[ -n "$GREETER_OUTPUT" ]]; then
+        # Accepts several monitors separated by ';', most wanted first, each a
+        # connector name or a description. Names are converted to descriptions.
+        local -a descs=()
+        mapfile -t descs < <(_output_descriptions "$GREETER_OUTPUT")
+        _greetd_pin_output "${descs[@]}"
+        local_conf_set GREETER_OUTPUT "$(printf '%s;' "${descs[@]}" | sed 's/;$//')"
+    elif [[ -n "${_PREV_OUTPUT:-}" ]]; then
+        # Was pinned, now explicitly empty: that is a request to unpin.
+        _greetd_unpin_output
+        local_conf_set GREETER_OUTPUT ""
     fi
+
     # Matches what the upstream installer writes
-    # (https://github.com/Nomadcxx/sysc-greet). greetd launches cagebreak; the
-    # cagebreak config exec's the greeter. -e enables the IPC socket used to quit
+    # (https://github.com/Nomadcxx/sysc-greet), except that greetd launches our
+    # wrapper instead of cagebreak directly — the wrapper resolves the pinned
+    # monitor and then execs cagebreak. -e enables the IPC socket used to quit
     # cagebreak after login, which is why socat is a dependency.
-    sudo tee "$GREETD_CONF" >/dev/null <<'TOML'
+    sudo tee "$GREETD_CONF" >/dev/null <<TOML
 # Managed by 'setup greeter apply'.
 [terminal]
 vt = 1
 
 [default_session]
-command = "cagebreak -e -c /etc/greetd/cagebreak-greeter-config"
+command = "$GREETD_LAUNCHER"
 user = "greeter"
 
 [initial_session]
-command = "cagebreak -e -c /etc/greetd/cagebreak-greeter-config"
+command = "$GREETD_LAUNCHER"
 user = "greeter"
 TOML
     success "Wrote $GREETD_CONF"
@@ -534,7 +608,8 @@ cmd_check() {
 
     step "Binaries the greeter session runs"
     local b
-    for b in cagebreak kitty socat gslapper /usr/local/bin/sysc-greet; do
+    for b in cagebreak kitty socat gslapper /usr/local/bin/sysc-greet \
+             "$GREETD_LAUNCHER" "$GREETD_RESOLVER"; do
         if command -v "$b" &>/dev/null || [[ -x "$b" ]]; then
             success "$(basename "$b")"
         else
@@ -568,15 +643,33 @@ cmd_check() {
     fi
 
     step "Outputs"
-    local o connected
+    local o connected pinned resolved
     connected="$(_connected_outputs | tr '\n' ' ')"
     echo "      connected: $connected"
+
+    if [[ -r "$GREETD_OUTPUT_FILE" ]]; then
+        local any=0
+        while IFS= read -r pinned; do
+            [[ -n "$pinned" ]] || continue
+            if resolved="$("$GREETD_RESOLVER" "$pinned" 2>/dev/null)" && [[ -n "$resolved" ]]; then
+                [[ $any -eq 0 ]] \
+                    && success "greeter lands on $resolved — '$pinned'" \
+                    || info "fallback: $resolved — '$pinned'"
+                any=1
+            else
+                warn "not connected: '$pinned'"
+            fi
+        done < <(grep -vE '^[[:space:]]*(#|$)' "$GREETD_OUTPUT_FILE")
+        [[ $any -eq 1 ]] || \
+            warn "nothing in $GREETD_OUTPUT_FILE is connected — the greeter falls back to the first output"
+    else
+        info "not pinned — the greeter lands on the first enabled output"
+        info "Pin it with: GREETER_OUTPUT=DP-3 setup greeter apply"
+    fi
+
+    # A leftover static pin would fight the launcher, and is name-based.
     for o in $(grep -oP '^output \K[A-Za-z0-9-]+' "$CAGEBREAK_CONF" 2>/dev/null); do
-        if [[ " $connected " == *" $o "* ]]; then
-            success "$o is connected"
-        else
-            warn "$o is in the config but not connected"
-        fi
+        warn "$CAGEBREAK_CONF still hardcodes 'output $o' — remove it, the launcher pins now"
     done
 
     step "Keyring"

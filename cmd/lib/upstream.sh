@@ -170,6 +170,34 @@ _pin_is_stale() {
 
 _pin_is_tracked() { [[ -n "$(_installed_pin || true)" ]]; }
 
+# quickshell links Qt's private API, so a qt6-base bump breaks the installed
+# build even when the pin has not moved: same commit, same pkgrel, unloadable
+# runtime. The package ships /usr/share/libalpm/hooks/quickshell-check.hook,
+# which runs this same check after every Qt upgrade — but it only prints the
+# symbol error into the pacman output and nothing acts on it, so `status` and
+# `deps` have to ask as well. Missing binary is not a failure: that is the
+# "no pinned build installed" case, which the pin checks already report.
+_abi_ok() {
+    command -v quickshell &>/dev/null || return 0
+    quickshell --private-check-compat &>/dev/null
+}
+
+# Whether a package file on disk was built against the Qt that is installed now.
+# There is no way to inspect a .pkg.tar.zst for ABI compatibility, but mtime
+# against qt6-base's install date answers it well enough: a package built after
+# the last Qt bump links the current Qt, an older one reproduces the break the
+# moment it is installed.
+_prebuilt_is_current() {   # _prebuilt_is_current <pkgfile>
+    local pkg="$1" qt_date qt_epoch pkg_epoch
+    [[ -f "$pkg" ]] || return 1
+    qt_date="$(LC_ALL=C pacman -Qi qt6-base 2>/dev/null |
+               awk -F': ' '/^Install Date/ {print $2; exit}')"
+    [[ -n "$qt_date" ]] || return 1
+    qt_epoch="$(date -d "$qt_date" +%s 2>/dev/null)" || return 1
+    pkg_epoch="$(stat -c %Y "$pkg" 2>/dev/null)" || return 1
+    ((pkg_epoch > qt_epoch))
+}
+
 _upstream_tip() {
     local anchor="$CACHE_DIR/$_ANCHOR_FILE_REL" candidate
     if [[ -f "$anchor" ]]; then
@@ -403,10 +431,19 @@ cmd_update() {
 # the quickshell pin, and the two are installed by different commands.
 _warn_if_pin_stale() {
     command -v pacman &>/dev/null || return 0
-    _pin_is_stale || return 0
-    echo
-    warn "Upstream now pins quickshell at $(_pinned_commit | cut -c1-8), which is not the build you have."
-    warn "Run 'setup upstream deps' to rebuild the runtime to match."
+    if _pin_is_stale; then
+        echo
+        warn "Upstream now pins quickshell at $(_pinned_commit | cut -c1-8), which is not the build you have."
+        warn "Run 'setup upstream deps' to rebuild the runtime to match."
+        return 0
+    fi
+    # The pin can be current and the runtime still dead, when a qt6-base bump
+    # landed between two updates. Same remedy, so say it in the same place.
+    _abi_ok || {
+        echo
+        warn "The pinned quickshell build no longer loads against the installed Qt."
+        warn "Run 'setup upstream deps' to rebuild the runtime."
+    }
 }
 
 cmd_export() {
@@ -475,13 +512,21 @@ cmd_export() {
 }
 
 cmd_deps() {
+    local force=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --force) force=true; shift ;;
+            *) error "Unknown option: $1"; exit 1 ;;
+        esac
+    done
+
     _require_clone
     prevent_root
 
     local pkgdir="$CACHE_DIR/sdata/dist-arch/illogical-impulse-quickshell-git"
     [[ -d "$pkgdir" ]] || { error "Not found: $pkgdir"; exit 1; }
 
-    local pinned expected have
+    local pinned expected have cached
     pinned="$(_pinned_commit)"
     info "Upstream pins quickshell at ${pinned:0:8}"
 
@@ -489,12 +534,40 @@ cmd_deps() {
     # this PKGBUILD. Comparing pkgver-pkgrel is the only verifiable signal: the
     # pkgver is a fixed placeholder, but upstream bumps pkgrel every time it
     # moves _commit, so an exact match means the same pinned source.
+    #
+    # Matching pkgrel is necessary but not sufficient: a qt6-base bump breaks
+    # the build without moving the pin, so the runtime has to be asked whether
+    # it still loads before this is called done.
     expected="$(basename "$(cd "$pkgdir" && makepkg --packagelist 2>/dev/null | head -1)")"
     have="$(pacman -Q illogical-impulse-quickshell-git 2>/dev/null | awk '{print $2}')"
-    if [[ -n "$have" && "$expected" == *"-$have-"* ]]; then
-        echo "$pinned" >"$CACHE_DIR/$_PIN_FILE_REL"
-        success "Already at ${pinned:0:8} (installed $have) — nothing to build."
-        return 0
+    if [[ $force == false && -n "$have" && "$expected" == *"-$have-"* ]]; then
+        if _abi_ok; then
+            echo "$pinned" >"$CACHE_DIR/$_PIN_FILE_REL"
+            success "Already at ${pinned:0:8} (installed $have) — nothing to build."
+            return 0
+        fi
+        warn "Installed build matches the pin but does not load against the current Qt."
+        warn "Rebuilding it against qt6-base $(pacman -Q qt6-base 2>/dev/null | awk '{print $2}')."
+    fi
+
+    # A package already built for this pkgrel *after* the last Qt bump is byte
+    # for byte what a rebuild would produce. Installing it turns a ~40 minute Qt
+    # compile into a few seconds, which is the difference between a restore that
+    # is worth doing and one that gets skipped.
+    cached="$pkgdir/$expected"
+    if [[ $force == false ]] && _prebuilt_is_current "$cached"; then
+        info "Reusing the cached build: $expected (newer than qt6-base)"
+        if sudo pacman -U --noconfirm "$cached"; then
+            echo "$pinned" >"$CACHE_DIR/$_PIN_FILE_REL"
+            if _abi_ok; then
+                success "quickshell pinned at ${pinned:0:8} (from cache, no rebuild)"
+                info "Restart the shell to pick it up:  qs -c ii"
+                return 0
+            fi
+            warn "The cached build does not load either — falling back to a rebuild."
+        else
+            warn "Installing the cached build failed — falling back to a rebuild."
+        fi
     fi
 
     # The metapackage declares conflicts=(quickshell quickshell-git), so the AUR
@@ -526,8 +599,15 @@ cmd_deps() {
     info "Cleaning the build tree"
     rm -rf "$pkgdir/src" "$pkgdir/pkg" "$pkgdir/quickshell"
 
-    success "quickshell pinned at ${pinned:0:8}"
-    info "Restart the shell to pick it up:  qs -c ii"
+    if _abi_ok; then
+        success "quickshell pinned at ${pinned:0:8}"
+        info "Restart the shell to pick it up:  qs -c ii"
+    else
+        error "The fresh build still does not load against the current Qt."
+        error "Upstream's pinned commit may predate a breaking Qt change; try"
+        error "'setup upstream update' to move the pin, then 'deps' again."
+        return 1
+    fi
 }
 
 # Where to open an editor to work on the shell. Prints the config directory, not
@@ -575,6 +655,12 @@ cmd_status() {
         if ! pacman -Qq illogical-impulse-quickshell-git &>/dev/null; then
             warn "quickshell: unpinned AUR build installed — 'yay -Syu' can break the shell"
             warn "            run 'setup upstream deps' to switch to the pinned one"
+        elif ! _abi_ok; then
+            # Reported before the pin checks: the pin can be perfectly current
+            # and the shell still refuse to start, which is the failure mode a
+            # green 'installed and current' line used to hide.
+            warn "quickshell: installed build does not load against qt6-base $(pacman -Q qt6-base 2>/dev/null | awk '{print $2}')"
+            warn "            run 'setup upstream deps' to rebuild it"
         elif _pin_is_stale; then
             warn "quickshell: installed build is older than the pin (${pinned:0:8})"
             warn "            run 'setup upstream deps' to rebuild the runtime"
@@ -598,20 +684,27 @@ Usage: setup upstream <subcommand>
     apply             Rebuild the working tree only (after editing patches)
     update [--to REF] Fetch and merge upstream code; stops on conflicts
     export            Regenerate overlay/ and upstream.lock from the clone
-    deps              Build quickshell at the commit upstream pins (needs sudo)
-    status            Show lock, drift, pending changes and runtime pin
+    deps [--force]    Install quickshell at the commit upstream pins (needs sudo).
+                      Reuses a cached build when one is newer than qt6-base;
+                      --force always rebuilds from source
+    status            Show lock, drift, pending changes and runtime health
 
 'update' and 'deps' are separate on purpose: update only rewrites files and
-needs no root, while deps rebuilds a Qt package and does. They are related
+needs no root, while deps installs a Qt package and does. They are related
 though — an update can move the quickshell pin, so update and status both say
 when deps needs rerunning.
+
+Two things make the runtime stale, and both are reported the same way:
+  - the pin moved       an update brought a new _commit in the PKGBUILD
+  - Qt moved underneath a qt6-base bump breaks the build without touching the
+                        pin, since quickshell links Qt's private API
 
 Typical update:
     setup upstream update
     # resolve conflicts if any, then:
     setup upstream export
     git add overlay && git commit
-    setup upstream deps      # only if update said the pin moved
+    setup upstream deps      # only if update or status asked for it
 
 EOF
 }

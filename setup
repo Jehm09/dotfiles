@@ -31,6 +31,13 @@ Subcommands:
                   Runs: multilib → AUR helper → desktop → apps → greeter → hooks
                         → dotfiles → fish
 
+    update        Routine maintenance — 'post' builds the machine, this keeps it
+                  current. Handles the four things that go stale independently
+                  (system, end-4, the pinned runtime, packages/*.conf) in the
+                  order that avoids a wasted Qt compile or a dead shell.
+                  check | all | system | end4 | runtime | pkgs | dotfiles
+                  ('setup update --help')
+
     dotfiles      Link dotfiles to ~/.config — pick the desktop:
                       hyprland   dots/common + dots/hyprland
                       kde        dots/common  (+ 'setup kde apply' for Plasma)
@@ -68,6 +75,9 @@ Examples:
     $0 upstream status            Show the pinned upstream commit and any drift
     $0 upstream update            Merge new upstream changes into your overlay
     $0 upstream export            Save the merge result back into overlay/
+    $0 update check               Show what is stale, change nothing
+    $0 update all --hyprland      Update everything, in the right order
+    $0 update runtime             Reinstall the quickshell build end-4 pins
 
 EOF
 }
@@ -75,88 +85,223 @@ EOF
 # ------------------------------------------------------------------
 # Interactive menu (shown when run without arguments in a terminal)
 # ------------------------------------------------------------------
+# The top of the stack: Cancel here really does exit, there is nowhere to go
+# back to. 'tools' and 'update' open a submenu that can itself be cancelled —
+# when it is, it returns 1 instead of exiting, and the loop below just shows
+# this same menu again instead of ending the script. exec always wins the race
+# regardless: it replaces the process, so it never returns for the loop to see.
 _show_menu() {
-    local choice
-    if has_menu; then
-        choice="$(menu_radiolist "Arch Linux Setup" \
-"Two things happen here, and only the first is one-off:\n\n\
+    while true; do
+        local choice
+        if has_menu; then
+            choice="$(menu_radiolist "Arch Linux Setup" \
+"Three jobs, and only the first is one-off:\n\n\
   install   runs once, from the Arch live ISO\n\
-  post      everything else, re-runnable, whole or by steps\n\n\
+  post      builds the machine — re-runnable, whole or by steps\n\
+  update    keeps it current afterwards — the day-to-day one\n\n\
 Pick one:" \
-            post    "Configure the system  — opens the step menu" on \
-            tools   "Individual tools      — greeter, grub, upstream, kde" off \
-            install "Install Arch from the live ISO  (root, one-off)" off)" \
-            || exit 0
-    else
+                update  "Update / maintain     — opens the maintenance menu" on \
+                post    "Configure the system  — opens the step menu" off \
+                tools   "Individual tools      — greeter, grub, upstream, kde" off \
+                install "Install Arch from the live ISO  (root, one-off)" off)" \
+                || exit 0
+        else
+            echo ""
+            echo -e "${_CLR_BOLD}  Arch Linux Setup${_CLR_RST}"
+            echo ""
+            echo "    1)  update    Actualizar / mantener (el del día a día)"
+            echo "    2)  post      Configurar el sistema (abre el menú de pasos)"
+            echo "    3)  tools     Herramientas sueltas"
+            echo "    4)  install   Instalar Arch desde la ISO  (root, una sola vez)"
+            echo ""
+            echo "    0)  Salir"
+            echo ""
+            read -rp "  Opción: " _opt
+            case "$_opt" in
+                1) choice=update ;; 2) choice=post ;; 3) choice=tools ;; 4) choice=install ;;
+                0|"") exit 0 ;;
+                *) error "Opción inválida: $_opt"; exit 1 ;;
+            esac
+        fi
         echo ""
-        echo -e "${_CLR_BOLD}  Arch Linux Setup${_CLR_RST}"
-        echo ""
-        echo "    1)  post      Configurar el sistema (abre el menú de pasos)"
-        echo "    2)  tools     Herramientas sueltas"
-        echo "    3)  install   Instalar Arch desde la ISO  (root, una sola vez)"
-        echo ""
-        echo "    0)  Salir"
-        echo ""
-        read -rp "  Opción: " _opt
-        case "$_opt" in
-            1) choice=post ;; 2) choice=tools ;; 3) choice=install ;;
-            0|"") exit 0 ;;
-            *) error "Opción inválida: $_opt"; exit 1 ;;
-        esac
-    fi
-    echo ""
 
-    case "$choice" in
-        post)    exec "$REPO_ROOT/setup" post ;;
-        install) exec "$REPO_ROOT/setup" install ;;
-        tools)   _show_tools_menu ;;
-    esac
+        case "$choice" in
+            post)    exec "$REPO_ROOT/setup" post ;;
+            install) exec "$REPO_ROOT/setup" install ;;
+            tools)   _show_tools_menu && break ;;
+            update)  _show_update_menu && break ;;
+        esac
+    done
+}
+
+# Maintenance. Each entry maps to one 'setup update' subcommand; the blurb says
+# what it touches, so picking from here does not need the command reference.
+# Returns 1 for "went back" (cancelled here, or at the desktop picker this
+# opens) so the caller's menu loop re-shows itself instead of ending the
+# script — never 'exit' here, this is not the top of the stack. The while loop
+# below exists only so cancelling the desktop picker re-opens THIS checklist
+# rather than dropping out one more level than the user backed out of.
+_show_update_menu() {
+    while true; do
+        # Fixed order regardless of tick order or menu position: a qt6-base
+        # bump breaks the runtime without moving the pin, and end4 can move it
+        # too, so runtime always runs after both. dotfiles runs last because a
+        # merge can add new files that need linking. 'check' first costs
+        # nothing and 'all' already implies everything else, so picking it
+        # alongside other jobs would just redo their work — it wins alone.
+        local -a ORDER=(check system end4 runtime pkgs dotfiles)
+        local -a jobs=()
+
+        if has_menu; then
+            local _chosen
+            _chosen="$(menu_checklist "Update" \
+"Four things drift apart, and the order between them matters:\n\n\
+  system   the repos and the AUR\n\
+  end-4    the upstream shell, merged into your overlay\n\
+  runtime  quickshell, pinned by end-4 to one commit\n\
+  repo     the package lists in packages/*.conf\n\n\
+A qt6 upgrade breaks the runtime without moving the pin, so this always\n\
+runs them in that order regardless of what you tick. Space to toggle,\n\
+Enter to confirm. Pick 'all' alone to run everything:" \
+                check    "What is stale — changes nothing"                      off \
+                all      "Everything, in the right order"                       off \
+                system   "Official repos + AUR  (pacman / yay)"                 off \
+                end4     "Merge end-4 and export the overlay"                   off \
+                runtime  "Reinstall the quickshell build end-4 pins"            off \
+                pkgs     "Reinstall from packages/*.conf"                       off \
+                dotfiles "Re-link ~/.config"                                    off)" \
+                || return 1
+            [[ -n "$_chosen" ]] || return 1
+            mapfile -t jobs <<<"$_chosen"
+        else
+            echo ""
+            echo -e "${_CLR_BOLD}  Actualizar / mantener${_CLR_RST}"
+            echo ""
+            echo "    1) check      Qué está desactualizado (no cambia nada)"
+            echo "    2) all        Todo, en el orden correcto"
+            echo "    3) system     Repos oficiales + AUR"
+            echo "    4) end4       Traer end-4 y exportar el overlay"
+            echo "    5) runtime    Reinstalar el quickshell que end-4 fija"
+            echo "    6) pkgs       Reinstalar desde packages/*.conf"
+            echo "    7) dotfiles   Re-enlazar ~/.config"
+            echo ""
+            echo "    0) Volver"
+            echo ""
+            read -rp "  Opción(es), separadas por espacio (ej: 4 5): " -a _picks
+            [[ ${#_picks[@]} -eq 0 ]] && return 1
+            local _p
+            for _p in "${_picks[@]}"; do
+                case "$_p" in
+                    1) jobs+=(check) ;; 2) jobs+=(all) ;; 3) jobs+=(system) ;;
+                    4) jobs+=(end4) ;; 5) jobs+=(runtime) ;; 6) jobs+=(pkgs) ;;
+                    7) jobs+=(dotfiles) ;;
+                    0) return 1 ;;
+                    *) error "Opción inválida: $_p"; exit 1 ;;
+                esac
+            done
+        fi
+        echo ""
+
+        # 'all' subsumes every other job — run it alone rather than repeat work.
+        local _has_all=false _j
+        for _j in "${jobs[@]}"; do [[ "$_j" == all ]] && _has_all=true; done
+        $_has_all && jobs=(all)
+
+        # Sort into ORDER, dropping duplicates (checking a box twice in the
+        # plain-read fallback, say).
+        local -a run=() _seen=()
+        for _j in "${ORDER[@]}"; do
+            for _p in "${jobs[@]}"; do
+                [[ "$_p" == "$_j" ]] || continue
+                [[ " ${_seen[*]} " == *" $_j "* ]] && continue
+                run+=("$_j"); _seen+=("$_j")
+            done
+        done
+        # 'all' is not in ORDER — it stands for the whole chain on its own.
+        $_has_all && run=(all)
+
+        # Only the steps that read packages/*.conf or link ~/.config need to
+        # know which desktop this machine runs; asking for the others would be
+        # noise. Cancelling the picker goes back to this checklist, not out of
+        # 'update' entirely — 'continue' re-enters this same while loop.
+        local _needs_desktop=false
+        for _j in "${run[@]}"; do
+            case "$_j" in all|pkgs|dotfiles) _needs_desktop=true ;; esac
+        done
+        if $_needs_desktop; then
+            _ask_desktop || continue
+        fi
+
+        for _j in "${run[@]}"; do
+            case "$_j" in
+                all|pkgs|dotfiles) "$REPO_ROOT/setup" update "$_j" "--$_desktop" ;;
+                *)                 "$REPO_ROOT/setup" update "$_j" ;;
+            esac
+        done
+        return 0
+    done
 }
 
 # The pieces that are also steps of 'post', exposed on their own for when you
 # want to redo just one without walking the whole checklist.
+# Returns 1 for "went back" (cancelled here, or at the desktop picker 'dotfiles'
+# opens) — never 'exit', the caller's loop re-shows the parent menu instead.
 _show_tools_menu() {
-    local tool
-    if has_menu; then
-        tool="$(menu_radiolist "Tools" \
+    while true; do
+        local tool
+        if has_menu; then
+            tool="$(menu_radiolist "Tools" \
 "Each of these is also a step of 'post'. Here they run on their own." \
-            greeter-status "Login screen — what is active, what would break" on \
-            greeter-sddm   "Login screen — switch to SDDM"                   off \
-            greeter-greetd "Login screen — switch to greetd + sysc-greet"    off \
-            greeter-apply  "Login screen — re-apply config (after new monitors)" off \
-            grub           "Boot menu — add the console/TTY rescue entry"    off \
-            upstream       "end-4 shell — status, drift, unexported edits"   off \
-            dotfiles       "Link ~/.config for a desktop"                    off \
-            kde            "Apply the KDE Plasma profile"                    off)" \
-            || exit 0
-    else
-        echo "    1) greeter status   2) greeter sddm   3) greeter greetd"
-        echo "    4) greeter apply    5) grub           6) upstream"
-        echo "    7) dotfiles         8) kde            0) salir"
-        read -rp "  Opción: " _o
-        case "$_o" in
-            1) tool=greeter-status ;; 2) tool=greeter-sddm ;; 3) tool=greeter-greetd ;;
-            4) tool=greeter-apply  ;; 5) tool=grub ;; 6) tool=upstream ;;
-            7) tool=dotfiles ;; 8) tool=kde ;;
-            *) exit 0 ;;
-        esac
-    fi
-    echo ""
+                greeter-status "Login screen — what is active, what would break" on \
+                greeter-sddm   "Login screen — switch to SDDM"                   off \
+                greeter-greetd "Login screen — switch to greetd + sysc-greet"    off \
+                greeter-apply  "Login screen — re-apply config (after new monitors)" off \
+                grub           "Boot menu — add the console/TTY rescue entry"    off \
+                upstream       "end-4 shell — status, drift, unexported edits"   off \
+                upstream-export "end-4 shell — save overlay edits before merging" off \
+                dotfiles       "Link ~/.config for a desktop"                    off \
+                kde            "Apply the KDE Plasma profile"                    off)" \
+                || return 1
+        else
+            echo "    1) greeter status   2) greeter sddm   3) greeter greetd"
+            echo "    4) greeter apply    5) grub           6) upstream status"
+            echo "    7) upstream export  8) dotfiles       9) kde"
+            echo "    0) volver"
+            read -rp "  Opción: " _o
+            case "$_o" in
+                1) tool=greeter-status ;; 2) tool=greeter-sddm ;; 3) tool=greeter-greetd ;;
+                4) tool=greeter-apply  ;; 5) tool=grub ;; 6) tool=upstream ;;
+                7) tool=upstream-export ;; 8) tool=dotfiles ;; 9) tool=kde ;;
+                *) return 1 ;;
+            esac
+        fi
+        echo ""
 
-    case "$tool" in
-        greeter-status) exec "$REPO_ROOT/setup" greeter status ;;
-        greeter-sddm)   exec "$REPO_ROOT/setup" greeter sddm   ;;
-        greeter-greetd) exec "$REPO_ROOT/setup" greeter greetd ;;
-        greeter-apply)  exec "$REPO_ROOT/setup" greeter apply  ;;
-        grub)           exec "$REPO_ROOT/setup" grub rescue    ;;
-        upstream)       exec "$REPO_ROOT/setup" upstream status ;;
-        kde)            exec "$REPO_ROOT/setup" kde apply      ;;
-        dotfiles)       _ask_desktop; exec "$REPO_ROOT/setup" dotfiles "$_desktop" ;;
-    esac
+        case "$tool" in
+            greeter-status)  exec "$REPO_ROOT/setup" greeter status ;;
+            greeter-sddm)    exec "$REPO_ROOT/setup" greeter sddm   ;;
+            greeter-greetd)  exec "$REPO_ROOT/setup" greeter greetd ;;
+            greeter-apply)   exec "$REPO_ROOT/setup" greeter apply  ;;
+            grub)            exec "$REPO_ROOT/setup" grub rescue    ;;
+            upstream)        exec "$REPO_ROOT/setup" upstream status ;;
+            # 'Update > end4' merges upstream into the clone, and refuses to run
+            # if the clone has edits it does not know about yet — which is
+            # exactly what live-editing a file symlinked into ~/.config leaves
+            # behind. This folds them into the clone's history and regenerates
+            # overlay/ from them, so the clone is clean and 'end4' can proceed.
+            upstream-export) exec "$REPO_ROOT/setup" upstream export ;;
+            kde)             exec "$REPO_ROOT/setup" kde apply      ;;
+            # Cancelling the desktop picker goes back to this menu, not out of
+            # 'tools' entirely — 'continue' re-enters this same while loop.
+            dotfiles)        _ask_desktop || continue
+                             exec "$REPO_ROOT/setup" dotfiles "$_desktop" ;;
+        esac
+    done
 }
 
 # There is no default desktop: the two profiles are mutually exclusive, so the
-# choice is always explicit.
+# choice is always explicit. Returns 1 on cancel instead of exiting — this is a
+# picker opened from within another menu, never the top of the stack.
 _ask_desktop() {
     if has_menu; then
         _desktop="$(menu_radiolist "Desktop" \
@@ -165,19 +310,22 @@ the terminal and CLI side, which is the same whichever desktop you run.\n\n\
 The desktop only decides what gets linked ON TOP of that:" \
             hyprland "+ the graphical side: hypr, quickshell, fuzzel, wlogout" on \
             kde      "+ nothing here — Plasma is copy-managed by 'setup kde apply'" off)" \
-            || exit 0
-        return
+            || return 1
+        return 0
     fi
     echo "    ¿Qué escritorio?"
     echo ""
     echo "      1) hyprland   dots/common + dots/hyprland"
     echo "      2) kde        dots/common  (Plasma se aplica con 'setup kde apply')"
     echo ""
+    echo "      0) Volver"
+    echo ""
     read -rp "  Escritorio: " _d
     echo ""
     case "$_d" in
         1|hyprland) _desktop="hyprland" ;;
         2|kde)      _desktop="kde"      ;;
+        0|"") return 1 ;;
         *) error "Opción inválida: $_d"; exit 1 ;;
     esac
 }
@@ -216,6 +364,12 @@ case "${1:-}" in
         shift
         prevent_root
         bash "$REPO_ROOT/cmd/lib/upstream.sh" "$@"
+        ;;
+
+    update)
+        shift
+        prevent_root
+        bash "$REPO_ROOT/cmd/lib/update.sh" "$@"
         ;;
 
     grub)

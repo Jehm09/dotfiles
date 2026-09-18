@@ -32,7 +32,9 @@ local_conf_set() {
 # Written by setup; safe to edit by hand. See local.conf.example.
 EOF
     fi
-    echo "${key}=${value}" >>"$DOTFILES_LOCAL_CONF"
+    # Single-quoted: values carry spaces and ';' (a monitor description, say),
+    # and this file is sourced. Embedded quotes are escaped the shell way.
+    printf "%s='%s'\n" "$key" "${value//\'/\'\\\'\'}" >>"$DOTFILES_LOCAL_CONF"
 }
 
 # ------------------------------------------------------------------
@@ -103,6 +105,32 @@ emptyscale=black,gray
 fullscale=black,brightcyan
 '
 
+# Focus starts on the list, not on the buttons — Ok/Cancel are the very bottom
+# row, reached only with Tab, and there is nothing on screen that says so.
+# Esc happens to work too, but is not spelled out here on purpose: some
+# terminals/multiplexers hold it back waiting to see if more bytes follow (it
+# is also the first byte of every arrow key), so it can take a long timeout to
+# register, or never reach whiptail at all. Tab, then Enter, always works.
+_MENU_NAV_HINT="(Tab to reach Ok/Cancel, Enter selects)"
+_MENU_WIDTH=74
+# Inner text width whiptail actually wraps to, once its border and padding are
+# subtracted. Matched to _MENU_WIDTH, not guessed: get this wrong in either
+# direction and the line count below stops matching what whiptail draws.
+_MENU_TEXT_WIDTH=$(( _MENU_WIDTH - 4 ))
+
+# Rendered height needed for a whiptail message: real newlines and whiptail's
+# own literal "\n" both count, AND each resulting line that is still too long
+# gets word-wrapped into more lines by whiptail itself — so this counts lines
+# the same way whiptail will, with the same wrap width, instead of a flat
+# constant that was only ever right for a one-line prompt.
+#
+# `awk 'END{print NR}'`, not `wc -l`: the prompt often ends without a trailing
+# newline (this file's hint is the last thing appended), and wc -l does not
+# count that final, unterminated line.
+_menu_text_lines() {
+    printf '%s' "$1" | sed 's/\\n/\n/g' | fold -s -w "$_MENU_TEXT_WIDTH" | awk 'END{print NR}'
+}
+
 # Checkbox list. Prints the chosen tags, one per line.
 # Args: title, prompt, then triplets of  tag  label  on|off
 menu_checklist() {
@@ -111,9 +139,14 @@ menu_checklist() {
     while (($# >= 3)); do items+=("$1" "$2" "$3"); shift 3; done
 
     local rows=$(( ${#items[@]} / 3 ))
-    # --separate-output gives one tag per line instead of a quoted single line.
+    local full_prompt="$prompt"$'\n'"$_MENU_NAV_HINT — Space toggles"
+    local text_lines; text_lines=$(_menu_text_lines "$full_prompt")
+    # +6: 2 border rows, a blank line above the list and one above the button
+    # row, the button row itself, and one line of breathing room — the exact
+    # chrome whiptail adds around the text and the list, checked against its
+    # actual output rather than assumed.
     whiptail --title "$title" --separate-output \
-        --checklist "$prompt" $((rows + 9)) 74 "$rows" \
+        --checklist "$full_prompt" $((text_lines + rows + 6)) "$_MENU_WIDTH" "$rows" \
         "${items[@]}" 3>&1 1>&2 2>&3
 }
 
@@ -125,8 +158,10 @@ menu_radiolist() {
     while (($# >= 3)); do items+=("$1" "$2" "$3"); shift 3; done
 
     local rows=$(( ${#items[@]} / 3 ))
+    local full_prompt="$prompt"$'\n'"$_MENU_NAV_HINT"
+    local text_lines; text_lines=$(_menu_text_lines "$full_prompt")
     whiptail --title "$title" \
-        --radiolist "$prompt" $((rows + 9)) 74 "$rows" \
+        --radiolist "$full_prompt" $((text_lines + rows + 6)) "$_MENU_WIDTH" "$rows" \
         "${items[@]}" 3>&1 1>&2 2>&3
 }
 

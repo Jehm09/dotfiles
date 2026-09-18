@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+# Greeter session entry point. greetd runs this as the `greeter` user; see the
+# `command` in /etc/greetd/config.toml.
+#
+# Why this exists instead of a plain `cagebreak -c <config>`: cagebreak can only
+# address a monitor by connector name, and connector names move — a GPU driver
+# update renumbers them, and so does swapping the cable to another port. Pinning
+# the greeter to "DP-5" in a file written months ago is how the login screen
+# ended up on a TV that is normally switched off.
+#
+# So the preference is stored in /etc/greetd/greeter-output as EDID
+# descriptions, one per line, most wanted first, and each is resolved to
+# whatever connector that monitor has RIGHT NOW, every time the greeter starts.
+# Lines starting with # are ignored.
+#
+#     Samsung Electric Company LC32G5xT HNTT800017
+#     LG Electronics LG HDR WFHD 0x00017F08
+#
+# Cagebreak cannot mirror, so the greeter still draws on exactly one screen:
+# the first line that matches something connected. The rest are the fallback
+# chain, for when that monitor is unplugged.
+#
+# With no file, or when nothing in it matches, the base config is used
+# unchanged: every output stays enabled and the greeter lands on the first one.
+# That is the safe direction to fail — a greeter on the wrong screen beats a
+# greeter that does not start.
+set -u
+
+BASE=/etc/greetd/cagebreak-greeter-config
+WANT_FILE=/etc/greetd/greeter-output
+RESOLVER=/usr/local/bin/greeter-resolve-output
+
+# XDG_RUNTIME_DIR is per-user and 0700; mktemp is the fallback for a greeter
+# session started without one.
+if [[ -n "${XDG_RUNTIME_DIR:-}" && -d "${XDG_RUNTIME_DIR:-}" ]]; then
+    cfg="$XDG_RUNTIME_DIR/cagebreak-greeter-config"
+else
+    cfg="$(mktemp -t cagebreak-greeter-config.XXXXXX)" || cfg=""
+fi
+[[ -n "$cfg" ]] || exec cagebreak -e -c "$BASE"
+
+wants=()
+[[ -r "$WANT_FILE" ]] && mapfile -t wants < <(grep -vE '^[[:space:]]*(#|$)' "$WANT_FILE" 2>/dev/null)
+
+# Only `prio`. Not `disable`, and not pos/res/rate: both make the greeter exit
+# with "EGL: Failed to initialize EGL" and greetd then loops. `prio` leaves every
+# output enabled and only reorders them, so the greeter lands on the first.
+# Higher is earlier, and cagebreak wants n >= 1.
+lines=""
+if [[ ${#wants[@]} -gt 0 && -x "$RESOLVER" ]]; then
+    prio=$(( ${#wants[@]} * 10 ))
+    for want in "${wants[@]}"; do
+        if out="$("$RESOLVER" "$want" 2>/dev/null)" && [[ -n "$out" ]]; then
+            lines+="output $out prio $prio"$'\n'
+        fi
+        prio=$(( prio - 10 ))
+    done
+fi
+
+if [[ -n "$lines" ]]; then
+    awk -v block="$lines" '
+        !done && /^exec / { printf "%s", block; done = 1 }
+        { print }
+        END { if (!done) printf "%s", block }
+    ' "$BASE" > "$cfg" || cp "$BASE" "$cfg"
+else
+    cp "$BASE" "$cfg"
+fi
+
+exec cagebreak -e -c "$cfg"
