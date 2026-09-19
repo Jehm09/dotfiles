@@ -1,0 +1,18 @@
+# Acceso a /dev/hidraw* para configuradores de teclados (VIA, Vial, qmk).
+#
+# El prefijo tiene que ser MENOR A 73: quien procesa el tag uaccess es
+# /usr/lib/udev/rules.d/73-seat-late.rules, y udev lee en orden lexicografico.
+# Un 92-via.rules matchea el dispositivo y no hace nada.
+#
+# Una linea por vendor. El ID sale de `lsusb` (la primera mitad del campo ID).
+# Instalar con:  sudo install -m 0644 70-via.rules /etc/udev/rules.d/
+
+# NuPhy (Halo65 V2 — por cable es 19f5:3315, el dongle 19f5:3247 no sirve para VIA)
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="19f5", TAG+="uaccess"
+
+# MonsGeek
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="3151", TAG+="uaccess"
+
+# YUNZII B75 Pro Max — lsusb lo muestra como "EIZO Corp." porque comparte el
+# vendor ID 056d, no es un monitor
+KERNEL=="hidraw*", SUBSYSTEM=="hidraw", ATTRS{idVendor}=="056d", TAG+="uaccess"

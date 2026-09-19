@@ -168,6 +168,22 @@ ContentPage {
         return !monitor.disabled;
     }
 
+    // Monitores detectados que quedarían encendidos con la config actual.
+    readonly property int enabledMonitorCount: {
+        const detected = HyprlandData.allMonitors || [];
+        let n = 0;
+        for (let i = 0; i < detected.length; i++) {
+            if (root.monitorEnabled(detected[i])) n++;
+        }
+        return n;
+    }
+
+    // Con un solo monitor encendido, apply-monitors.sh ignora su posición
+    // guardada y lo manda a (0, 0): una pantalla única lejos del origen deja
+    // ventanas y juegos en un área que ya no existe. El JSON conserva la
+    // posición real para cuando vuelva a haber dos.
+    readonly property bool singleMonitorMode: root.enabledMonitorCount === 1
+
     function monitorPosition(monitor) {
         const cfg = root.monitorConfig(monitor.name);
         const x = (cfg && cfg.x !== undefined) ? cfg.x : monitor.x;
@@ -274,6 +290,8 @@ ContentPage {
                 required property var modelData
                 required property int index
 
+                readonly property bool isLastEnabled: root.singleMonitorMode && root.monitorEnabled(modelData)
+
                 Layout.fillWidth: true
                 Layout.topMargin: 2
                 implicitHeight: cardColumn.implicitHeight + 20
@@ -348,10 +366,23 @@ ContentPage {
                         buttonIcon: "power_settings_new"
                         text: Translation.tr("Enabled")
                         checked: root.monitorEnabled(monitorCard.modelData)
+                        // Último encendido: apagarlo dejaría la sesión sin ninguna pantalla.
+                        enabled: !monitorCard.isLastEnabled
                         onCheckedChanged: {
                             if (checked === root.monitorEnabled(monitorCard.modelData)) return;
                             root.upsertMonitor(monitorCard.modelData.name, { enabled: checked });
                         }
+                    }
+
+                    StyledText {
+                        visible: monitorCard.isLastEnabled
+                        Layout.fillWidth: true
+                        Layout.leftMargin: 8
+                        Layout.rightMargin: 8
+                        wrapMode: Text.WordWrap
+                        text: Translation.tr("Only active monitor: it can't be turned off, and it stays at (0, 0) while it is alone. Its saved position comes back when you enable another one.")
+                        font.pixelSize: Appearance.font.pixelSize.smaller
+                        color: Appearance.colors.colSubtext
                     }
 
                     RowLayout {
@@ -594,6 +625,9 @@ ContentPage {
             }
 
             function getPos(name) {
+                // Un solo monitor encendido: se aplica en (0, 0) pase lo que pase,
+                // así que el editor lo dibuja ahí en vez de mentir con la guardada.
+                if (root.singleMonitorMode) return { x: 0, y: 0 };
                 if (editor.pendingPositions[name]) return editor.pendingPositions[name];
                 const detected = (HyprlandData.allMonitors || []).find(m => m.name === name);
                 if (!detected) return { x: 0, y: 0 };
@@ -699,6 +733,13 @@ ContentPage {
             function applyLayout() {
                 const monitors = editor.activeMonitors();
                 if (monitors.length === 0) return;
+                // Con uno solo no hay nada que acomodar, y su posición guardada es
+                // la que vuelve al encender un segundo monitor: no se toca.
+                if (root.singleMonitorMode) {
+                    editor.pendingPositions = ({});
+                    editor.positionsRevision++;
+                    return;
+                }
                 // Persist exactly what the user set — the origin walls (0, 0) act as
                 // the fixed reference, so we do NOT normalize the bounding box here.
                 for (let i = 0; i < monitors.length; i++) {
@@ -733,7 +774,9 @@ ContentPage {
                     }
                     StyledText {
                         Layout.fillWidth: true
-                        text: Translation.tr("Drag monitors to arrange. Edges snap to neighbors.")
+                        text: root.singleMonitorMode
+                            ? Translation.tr("Only one active monitor: it is fixed at (0, 0). Its saved position returns when you enable another one.")
+                            : Translation.tr("Drag monitors to arrange. Edges snap to neighbors.")
                         color: Appearance.colors.colOnSecondaryContainer
                         font.weight: Font.Medium
                     }
@@ -936,8 +979,8 @@ ContentPage {
                             MouseArea {
                                 id: dragArea
                                 anchors.fill: parent
-                                cursorShape: Qt.SizeAllCursor
-                                drag.target: monitorRect
+                                cursorShape: root.singleMonitorMode ? Qt.ArrowCursor : Qt.SizeAllCursor
+                                drag.target: root.singleMonitorMode ? null : monitorRect
                                 drag.axis: Drag.XAndYAxis
                                 // Hard walls: the origin lines (x=0, y=0) act as the left/top
                                 // boundary the monitor rectangle cannot cross.

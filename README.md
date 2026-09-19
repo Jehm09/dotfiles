@@ -384,6 +384,9 @@ drift.
 ```
 dotfiles/
 ├── setup                    Main entry point
+├── docs/
+│   ├── peripherals.md       Hardware needing a Linux-side change (udev, HID, VIA)
+│   └── via/                 VIA keyboard definitions and a raw HID probe
 ├── cmd/
 │   ├── lib/
 │   │   ├── utils.sh         Shared functions (colors, sudo keepalive, etc.)
@@ -719,6 +722,19 @@ after every `qt6-base` / `qt6-wayland` upgrade.
 The Python venv the shell's colour, thumbnail and region scripts depend on is
 built by `setup post` from `packages/requirements.txt` into
 `~/.local/state/quickshell/.venv`.
+
+## Peripherals
+
+Programmable keyboards and configurable mice are driven over `/dev/hidraw*`,
+which your user cannot open by default — so VIA, Vial, Solaar and Piper all
+fail on a fresh install until a udev rule exists. `setup` does not handle this:
+which rules a machine needs depends on what is plugged into it.
+
+[docs/peripherals.md](docs/peripherals.md) is the recipe — the rule itself, why
+its filename has to sort below `73-seat-late.rules` or it silently does
+nothing, how to tell a permission problem apart from firmware that does not
+speak VIA, and the specifics for the hardware here (NuPhy Halo65 V2 over
+QMK/VIA, plus what to reach for with Logitech and Razer devices).
 
 ## Credits
 

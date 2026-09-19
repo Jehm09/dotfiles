@@ -230,6 +230,7 @@
             },
             {
                 "desc": "Samsung Electric Company LC32G5xT HNTT800017",
+                "enabled": true,
                 "height": 1440,
                 "name": "DP-3",
                 "refreshRate": 144,
