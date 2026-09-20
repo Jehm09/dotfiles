@@ -1,0 +1,12 @@
+# El touchpad del DualSense (PS5) se expone como dispositivo de puntero aparte,
+# asi que apoyar el pulgar mueve el cursor del escritorio mientras jugas.
+# LIBINPUT_IGNORE_DEVICE hace que libinput lo saltee; el gamepad sigue
+# funcionando y lo que lee evdev/hidraw directo (Steam, SDL) no se entera.
+#
+# Hacen falta las dos lineas: el nombre del dispositivo cambia segun el transporte.
+# Instalar con:  sudo install -m 0644 71-dualsense-ignore-mouse.rules /etc/udev/rules.d/
+
+# USB
+ATTRS{name}=="Sony Interactive Entertainment DualSense Wireless Controller Touchpad", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+# Bluetooth
+ATTRS{name}=="DualSense Wireless Controller Touchpad", ENV{LIBINPUT_IGNORE_DEVICE}="1"

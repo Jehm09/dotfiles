@@ -385,7 +385,8 @@ drift.
 dotfiles/
 ├── setup                    Main entry point
 ├── docs/
-│   ├── peripherals.md       Hardware needing a Linux-side change (udev, HID, VIA)
+│   ├── peripherals.md       Hardware needing a Linux-side change (keyboards, mice, controllers)
+│   ├── udev/                Hand-installed udev rules, one per device that needs one
 │   └── via/                 VIA keyboard definitions and a raw HID probe
 ├── cmd/
 │   ├── lib/
@@ -481,7 +482,7 @@ get a whiptail checklist. The desktop choice is required and has no default.
 | 6 | Pacman hooks | Copies `packages/hooks/enabled/*.hook` to `/etc/pacman.d/hooks` (currently empty; move one out of `disabled/` to activate it) |
 | 7 | Dotfiles | Calls `symlink.sh` for the chosen desktop |
 | 8 | Shell | `chsh` to fish |
-| 9 | Hardware fixes | Logitech module blacklist to `/etc/modprobe.d/`, rebuilds initramfs |
+| 9 | Hardware fixes | Logitech module blacklist to `/etc/modprobe.d/`, rebuilds initramfs — what it is for and when to drop it: [docs/peripherals.md](docs/peripherals.md) |
 
 sudo is asked for once, after the flags are parsed, and kept alive for the rest
 of the run — so `--help` and the desktop validation never prompt.
@@ -725,16 +726,22 @@ built by `setup post` from `packages/requirements.txt` into
 
 ## Peripherals
 
-Programmable keyboards and configurable mice are driven over `/dev/hidraw*`,
-which your user cannot open by default — so VIA, Vial, Solaar and Piper all
-fail on a fresh install until a udev rule exists. `setup` does not handle this:
-which rules a machine needs depends on what is plugged into it.
+Input hardware that needs something done on the Linux side before it behaves.
+`setup` does not install any of it: which fixes a machine needs depends on what
+is plugged into it, so they are written up rather than automated.
 
-[docs/peripherals.md](docs/peripherals.md) is the recipe — the rule itself, why
-its filename has to sort below `73-seat-late.rules` or it silently does
-nothing, how to tell a permission problem apart from firmware that does not
-speak VIA, and the specifics for the hardware here (NuPhy Halo65 V2 over
-QMK/VIA, plus what to reach for with Logitech and Razer devices).
+[docs/peripherals.md](docs/peripherals.md) is the page to read, and
+[docs/udev/](docs/udev/) holds the rules it installs:
+
+| Problem | Fix |
+|---|---|
+| VIA/Vial cannot reach a programmable keyboard | hidraw access rule — and the filename trap that makes it silently do nothing |
+| Logitech scroll wheel goes analog after a kernel update | `hid_logitech_hidpp` blacklist, and when to drop it again |
+| DualSense touchpad drags the desktop cursor | `LIBINPUT_IGNORE_DEVICE` rule, one line per transport |
+
+The Logitech blacklist is the exception that *is* automated, as step 9 of
+`setup post`. It is documented anyway, because it is tied to one mouse and one
+kernel regression and should be removed when either changes.
 
 ## Credits
 

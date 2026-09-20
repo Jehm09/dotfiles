@@ -330,7 +330,8 @@ index 6078f0b4..3b8372d7 100644
  --##! Session
 -hl.bind("SUPER + L", hl.dsp.exec_cmd("loginctl lock-session"), { description = "Session: Lock" })
 +hl.bind("SUPER + L", hl.dsp.exec_cmd("loginctl lock-session && sleep 0.3 && hyprctl dispatch 'hl.dsp.dpms(false)'"), { description = "Session: Lock" })
- hl.bind("SUPER + SHIFT + L", hl.dsp.exec_cmd("systemctl suspend || loginctl suspend"),
+-hl.bind("SUPER + SHIFT + L", hl.dsp.exec_cmd("systemctl suspend || loginctl suspend"),
++hl.bind("SUPER + SHIFT + L", hl.dsp.exec_cmd("bash -c 'sleep 1; systemctl suspend || loginctl suspend'"), -- sleep 1: sin él el key-release aborta el S3
      { locked = true, description = "Session: Sleep" }) -- Sleep
  -- hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("systemctl suspend || loginctl suspend"), {locked = true} ) -- # [hidden] Suspend when laptop lid is closed, uncomment if for whatever reason it's not the default behavior
 @@ -347,6 +377,7 @@ hl.bind("SUPER + T", hl.dsp.exec_cmd(terminal))
