@@ -1,5 +1,5 @@
 diff --git a/dots/.config/hypr/hyprland/keybinds.lua b/dots/.config/hypr/hyprland/keybinds.lua
-index 6078f0b4..3b8372d7 100644
+index 6078f0b4..f2632daa 100644
 --- a/dots/.config/hypr/hyprland/keybinds.lua
 +++ b/dots/.config/hypr/hyprland/keybinds.lua
 @@ -23,10 +23,6 @@ hl.bind("SUPER_R", hl.dsp.global("quickshell:workspaceNumber"),
@@ -324,16 +324,17 @@ index 6078f0b4..3b8372d7 100644
  
  --##! Virtual machines
  hl.define_submap("virtual-machine", function()
-@@ -332,7 +362,7 @@ hl.bind("SUPER + ALT + Equal",
+@@ -332,8 +362,8 @@ hl.bind("SUPER + ALT + Equal",
      hl.dsp.exec_cmd("notify-send 'Urgent notification' 'Ah hell no' -u critical -a 'Hyprland keybind'")) -- # [hidden]
  
  --##! Session
 -hl.bind("SUPER + L", hl.dsp.exec_cmd("loginctl lock-session"), { description = "Session: Lock" })
-+hl.bind("SUPER + L", hl.dsp.exec_cmd("loginctl lock-session && sleep 0.3 && hyprctl dispatch 'hl.dsp.dpms(false)'"), { description = "Session: Lock" })
 -hl.bind("SUPER + SHIFT + L", hl.dsp.exec_cmd("systemctl suspend || loginctl suspend"),
++hl.bind("SUPER + L", hl.dsp.exec_cmd("loginctl lock-session && sleep 0.3 && hyprctl dispatch 'hl.dsp.dpms(false)'"), { description = "Session: Lock" })
 +hl.bind("SUPER + SHIFT + L", hl.dsp.exec_cmd("bash -c 'sleep 1; systemctl suspend || loginctl suspend'"), -- sleep 1: sin él el key-release aborta el S3
      { locked = true, description = "Session: Sleep" }) -- Sleep
  -- hl.bind("switch:on:Lid Switch", hl.dsp.exec_cmd("systemctl suspend || loginctl suspend"), {locked = true} ) -- # [hidden] Suspend when laptop lid is closed, uncomment if for whatever reason it's not the default behavior
+ 
 @@ -347,6 +377,7 @@ hl.bind("SUPER + T", hl.dsp.exec_cmd(terminal))
  hl.bind("CTRL + ALT + T", hl.dsp.exec_cmd(terminal))
  hl.bind("SUPER + E", hl.dsp.exec_cmd(fileManager), { description = "App: File manager" })

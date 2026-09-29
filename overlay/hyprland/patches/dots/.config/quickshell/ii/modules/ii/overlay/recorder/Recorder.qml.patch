@@ -1,0 +1,22 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/overlay/recorder/Recorder.qml b/dots/.config/quickshell/ii/modules/ii/overlay/recorder/Recorder.qml
+index 81288412..7aed2ff8 100644
+--- a/dots/.config/quickshell/ii/modules/ii/overlay/recorder/Recorder.qml
++++ b/dots/.config/quickshell/ii/modules/ii/overlay/recorder/Recorder.qml
+@@ -31,7 +31,7 @@ StyledOverlayWidget {
+                     name: "Screenshot region"
+                     onClicked: {
+                         GlobalStates.overlayOpen = false;
+-                        Quickshell.execDetached(["qs", "-p", Quickshell.shellPath(""), "ipc", "call", "region", "screenshot"]);
++                        QsLaunch.detached(["-p", Quickshell.shellPath(""), "ipc", "call", "region", "screenshot"]);
+                     }
+                 }
+ 
+@@ -49,7 +49,7 @@ StyledOverlayWidget {
+                     name: "Record region"
+                     onClicked: {
+                         GlobalStates.overlayOpen = false;
+-                        Quickshell.execDetached(["qs", "-p", Quickshell.shellPath(""), "ipc", "call", "region", "recordWithSound"]);
++                        QsLaunch.detached(["-p", Quickshell.shellPath(""), "ipc", "call", "region", "recordWithSound"]);
+                     }
+                 }
+                 

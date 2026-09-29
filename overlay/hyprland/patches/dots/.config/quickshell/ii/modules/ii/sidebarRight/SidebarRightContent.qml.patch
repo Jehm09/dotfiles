@@ -1,0 +1,13 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarRight/SidebarRightContent.qml b/dots/.config/quickshell/ii/modules/ii/sidebarRight/SidebarRightContent.qml
+index 412912ed..e5854eab 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarRight/SidebarRightContent.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarRight/SidebarRightContent.qml
+@@ -280,7 +280,7 @@ Item {
+                 buttonIcon: "settings"
+                 onClicked: {
+                     GlobalStates.sidebarRightOpen = false;
+-                    Quickshell.execDetached(["qs", "-p", root.settingsQmlPath]);
++                    QsLaunch.detached(["-p", root.settingsQmlPath]);
+                 }
+                 StyledToolTip {
+                     text: Translation.tr("Settings")

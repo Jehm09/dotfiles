@@ -1,0 +1,13 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/bar/UtilButtons.qml b/dots/.config/quickshell/ii/modules/ii/bar/UtilButtons.qml
+index 615ed653..47d51359 100644
+--- a/dots/.config/quickshell/ii/modules/ii/bar/UtilButtons.qml
++++ b/dots/.config/quickshell/ii/modules/ii/bar/UtilButtons.qml
+@@ -25,7 +25,7 @@ Item {
+             visible: Config.options.bar.utilButtons.showScreenSnip
+             sourceComponent: CircleUtilButton {
+                 Layout.alignment: Qt.AlignVCenter
+-                onClicked: Quickshell.execDetached(["qs", "-p", Quickshell.shellPath(""), "ipc", "call", "region", "screenshot"]);
++                onClicked: QsLaunch.detached(["-p", Quickshell.shellPath(""), "ipc", "call", "region", "screenshot"]);
+                 MaterialSymbol {
+                     horizontalAlignment: Qt.AlignHCenter
+                     fill: 1

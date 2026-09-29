@@ -1,0 +1,13 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/overview/SearchBar.qml b/dots/.config/quickshell/ii/modules/ii/overview/SearchBar.qml
+index 56a7f057..20b0700e 100644
+--- a/dots/.config/quickshell/ii/modules/ii/overview/SearchBar.qml
++++ b/dots/.config/quickshell/ii/modules/ii/overview/SearchBar.qml
+@@ -106,7 +106,7 @@ RowLayout {
+         Layout.bottomMargin: 4
+         onClicked: {
+             GlobalStates.overviewOpen = false;
+-            Quickshell.execDetached(["qs", "-p", Quickshell.shellPath(""), "ipc", "call", "region", "search"]);
++            QsLaunch.detached(["-p", Quickshell.shellPath(""), "ipc", "call", "region", "search"]);
+         }
+         text: "image_search"
+         StyledToolTip {

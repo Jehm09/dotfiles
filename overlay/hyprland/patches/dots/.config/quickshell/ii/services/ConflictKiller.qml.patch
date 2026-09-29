@@ -1,0 +1,13 @@
+diff --git a/dots/.config/quickshell/ii/services/ConflictKiller.qml b/dots/.config/quickshell/ii/services/ConflictKiller.qml
+index 547a4d3e..ffa2022f 100644
+--- a/dots/.config/quickshell/ii/services/ConflictKiller.qml
++++ b/dots/.config/quickshell/ii/services/ConflictKiller.qml
+@@ -40,7 +40,7 @@ Singleton {
+                     else Quickshell.execDetached(["killall", "mako", "dunst"])
+                 }
+                 if (openDialog) {
+-                    Quickshell.execDetached(["qs", "-p", root.killDialogQmlPath])
++                    QsLaunch.detached(["-p", root.killDialogQmlPath])
+                 }
+             }
+         }

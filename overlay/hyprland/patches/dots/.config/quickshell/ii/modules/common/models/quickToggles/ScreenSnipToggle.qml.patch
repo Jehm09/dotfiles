@@ -1,0 +1,13 @@
+diff --git a/dots/.config/quickshell/ii/modules/common/models/quickToggles/ScreenSnipToggle.qml b/dots/.config/quickshell/ii/modules/common/models/quickToggles/ScreenSnipToggle.qml
+index 28c53334..5c017f7b 100644
+--- a/dots/.config/quickshell/ii/modules/common/models/quickToggles/ScreenSnipToggle.qml
++++ b/dots/.config/quickshell/ii/modules/common/models/quickToggles/ScreenSnipToggle.qml
+@@ -21,7 +21,7 @@ QuickToggleModel {
+         interval: 300
+         repeat: false
+         onTriggered: {
+-            Quickshell.execDetached(["qs", "-p", Quickshell.shellPath(""), "ipc", "call", "region", "screenshot"]);
++            QsLaunch.detached(["-p", Quickshell.shellPath(""), "ipc", "call", "region", "screenshot"]);
+         }
+     }
+ 

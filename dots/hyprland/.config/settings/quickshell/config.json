@@ -216,13 +216,15 @@
             {
                 "desc": "Samsung Electric Company SAMSUNG 0x01000E00",
                 "enabled": false,
-                "name": "HDMI-A-1"
+                "name": "HDMI-A-2",
+                "x": 5120,
+                "y": 0
             },
             {
                 "desc": "LG Electronics LG HDR WFHD 0x00017F08",
-                "enabled": true,
+                "enabled": false,
                 "height": 1080,
-                "name": "DP-2",
+                "name": "DP-4",
                 "refreshRate": 74.99,
                 "width": 2560,
                 "x": 0,
@@ -232,7 +234,7 @@
                 "desc": "Samsung Electric Company LC32G5xT HNTT800017",
                 "enabled": true,
                 "height": 1440,
-                "name": "DP-3",
+                "name": "DP-5",
                 "refreshRate": 144,
                 "scale": 1,
                 "width": 2560,
