@@ -591,7 +591,9 @@ cmd_deps() {
     fi
     success "Built $(basename "$built")"
 
-    if pacman -Qq quickshell-git &>/dev/null; then
+    # Exact name only: `pacman -Q quickshell-git` also matches our own package,
+    # which provides it, and then `-R` fails with "target not found".
+    if pacman -Qq 2>/dev/null | grep -qx quickshell-git; then
         info "Removing the unpinned AUR build"
         sudo pacman -Rdd --noconfirm quickshell-git
     fi
