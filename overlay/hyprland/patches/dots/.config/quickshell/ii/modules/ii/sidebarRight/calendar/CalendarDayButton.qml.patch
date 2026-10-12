@@ -1,0 +1,62 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/CalendarDayButton.qml b/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/CalendarDayButton.qml
+index ab1aca55..0f02cba6 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/CalendarDayButton.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/CalendarDayButton.qml
+@@ -1,5 +1,7 @@
++import qs.services
+ import qs.modules.common
+ import qs.modules.common.widgets
++import qs.modules.common.functions
+ import QtQuick
+ import QtQuick.Layouts
+ 
+@@ -8,27 +10,43 @@ RippleButton {
+     property string day
+     property int isToday
+     property bool bold
++    property string date: "" // "YYYY-MM-DD"; vacío en la fila de días de la semana
++
++    readonly property var holidays: date.length > 0 ? Holidays.holidaysOn(date) : []
++    readonly property bool isHoliday: holidays.length > 0
++    // Rojo fijo: el m3error del tema sale rosado en modo oscuro
++    readonly property color holidayColor: "#ff5449"
+ 
+     Layout.fillWidth: false
+     Layout.fillHeight: false
+-    implicitWidth: 38; 
++    implicitWidth: 38;
+     implicitHeight: 38;
+ 
+     toggled: (isToday == 1)
+     buttonRadius: Appearance.rounding.small
+-    
++
+     contentItem: StyledText {
+         anchors.fill: parent
+         text: day
+         horizontalAlignment: Text.AlignHCenter
+-        font.weight: bold ? Font.DemiBold : Font.Normal
+-        color: (isToday == 1) ? Appearance.m3colors.m3onPrimary : 
+-            (isToday == 0) ? Appearance.colors.colOnLayer1 : 
++        font.weight: (bold || button.isHoliday) ? Font.DemiBold : Font.Normal
++        color: (isToday == 1) ? Appearance.m3colors.m3onPrimary :
++            button.isHoliday ? ColorUtils.transparentize(button.holidayColor, isToday == 0 ? 0 : 0.5) :
++            (isToday == 0) ? Appearance.colors.colOnLayer1 :
+             Appearance.colors.colOutlineVariant
+ 
+         Behavior on color {
+             animation: Appearance.animation.elementMoveFast.colorAnimation.createObject(this)
+         }
+     }
+-}
+ 
++    StyledToolTip {
++        extraVisibleCondition: button.isHoliday
++        text: {
++            if (!button.isHoliday) return "";
++            const [year, month, dayOfMonth] = button.date.split("-").map(Number);
++            const longDate = new Date(year, month - 1, dayOfMonth).toLocaleDateString(Qt.locale(Config.options.calendar.locale), "dddd d MMMM yyyy");
++            return [longDate, ...button.holidays.map(holiday => "• " + Holidays.displayName(holiday))].join("\n");
++        }
++    }
++}

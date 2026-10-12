@@ -1,0 +1,26 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/calendar_layout.js b/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/calendar_layout.js
+index e2042bff..48ba6dac 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/calendar_layout.js
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/calendar_layout.js
+@@ -60,6 +60,13 @@ function getDateInXMonthsTime(x) {
+     return targetDate;
+ }
+ 
++// "YYYY-MM-DD" de una celda; monthDiff (-1/0/1) puede cruzar de año
++function toIsoDate(year, month, monthDiff, day) {
++    const date = new Date(year, month - 1 + monthDiff, day);
++    const pad = n => String(n).padStart(2, '0');
++    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
++}
++
+ function getCalendarLayout(dateObject, highlight) {
+     if (!dateObject) dateObject = new Date();
+     const weekday = (dateObject.getDay() + 6) % 7; // MONDAY IS THE FIRST DAY OF THE WEEK
+@@ -87,6 +94,7 @@ function getCalendarLayout(dateObject, highlight) {
+     while (i < 6 && j < 7) {
+         calendar[i][j] = {
+             "day": toFill,
++            "date": toIsoDate(year, month, monthDiff, toFill),
+             "today": ((toFill == day && monthDiff == 0 && highlight) ? 1 : (
+                 monthDiff == 0 ? 0 : -1
+             ))

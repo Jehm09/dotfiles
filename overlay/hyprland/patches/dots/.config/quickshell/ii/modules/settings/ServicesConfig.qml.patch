@@ -1,32 +1,111 @@
 diff --git a/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml b/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml
-index aec8dc98..bf939808 100644
+index aec8dc98..a8af961b 100644
 --- a/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml
-@@ -7,23 +7,6 @@ import qs.modules.common.widgets
- ContentPage {
+@@ -1,5 +1,6 @@
+ import QtQuick
+ import QtQuick.Layouts
++import Quickshell
+ import qs.services
+ import qs.modules.common
+ import qs.modules.common.widgets
+@@ -8,18 +9,88 @@ ContentPage {
      forceWidth: true
  
--    ContentSection {
+     ContentSection {
 -        icon: "neurology"
 -        title: Translation.tr("AI")
--
--        MaterialTextArea {
--            Layout.fillWidth: true
++        id: calendarSection
++        icon: "calendar_month"
++        title: Translation.tr("Calendar")
+ 
++        readonly property string storedApiKey: KeyringStorage.keyringData?.holidays?.apiKey ?? ""
++        Component.onCompleted: KeyringStorage.fetchKeyringData()
++
++        // El shell principal es otro proceso: se le avisa por IPC para que vuelva a pedir los festivos
++        Timer {
++            id: holidaysRefreshDebounce
++            interval: 1000
++            onTriggered: QsLaunch.detached(["-p", Quickshell.shellPath(""), "ipc", "call", "holidays", "refresh"])
++        }
++        Timer {
++            id: apiKeySaveDebounce
++            interval: 1000
++            onTriggered: {
++                if (apiKeyField.text === calendarSection.storedApiKey) return;
++                KeyringStorage.setNestedField(["holidays", "apiKey"], apiKeyField.text.trim());
++                holidaysRefreshDebounce.restart();
++            }
++        }
++
++        ConfigSwitch {
++            buttonIcon: "event_busy"
++            text: Translation.tr("Show holidays (festivos.com.co)")
++            checked: Config.options.calendar.holidays.enable
++            onCheckedChanged: {
++                Config.options.calendar.holidays.enable = checked;
++            }
++        }
++        ConfigSpinBox {
++            icon: "av_timer"
++            text: Translation.tr("Polling interval (days)")
++            value: Config.options.calendar.holidays.fetchIntervalDays
++            from: 1
++            to: 30
++            stepSize: 1
++            onValueChanged: {
++                Config.options.calendar.holidays.fetchIntervalDays = value;
++            }
++        }
+         MaterialTextArea {
+             Layout.fillWidth: true
 -            placeholderText: Translation.tr("System prompt")
 -            text: Config.options.ai.systemPrompt
--            wrapMode: TextEdit.Wrap
--            onTextChanged: {
++            placeholderText: Translation.tr("API URL (empty = %1)").arg(Holidays.defaultApiUrl)
++            text: Config.options.calendar.holidays.apiUrl
+             wrapMode: TextEdit.Wrap
+             onTextChanged: {
 -                Qt.callLater(() => {
 -                    Config.options.ai.systemPrompt = text;
 -                });
--            }
--        }
--    }
--
-     ContentSection {
-         icon: "music_cast"
-         title: Translation.tr("Music Recognition")
-@@ -67,24 +50,6 @@ ContentPage {
++                if (text === Config.options.calendar.holidays.apiUrl) return;
++                Config.options.calendar.holidays.apiUrl = text;
++                holidaysRefreshDebounce.restart();
++            }
++        }
++        RowLayout {
++            Layout.fillWidth: true
++            spacing: 6
++            MaterialTextField {
++                id: apiKeyField
++                property bool revealed: false
++                Layout.fillWidth: true
++                // Se habilita recién con el keyring cargado: guardar antes pisaría el resto de sus datos
++                enabled: KeyringStorage.loaded
++                placeholderText: KeyringStorage.loaded ? Translation.tr("API key (stored in the keyring)") : Translation.tr("Loading keyring...")
++                text: calendarSection.storedApiKey
++                echoMode: revealed ? TextInput.Normal : TextInput.Password
++                wrapMode: TextInput.NoWrap
++                onTextChanged: {
++                    if (text !== calendarSection.storedApiKey) apiKeySaveDebounce.restart();
++                }
++            }
++            RippleButton {
++                implicitWidth: 36
++                implicitHeight: 36
++                buttonRadius: Appearance.rounding.full
++                onClicked: apiKeyField.revealed = !apiKeyField.revealed
++                contentItem: MaterialSymbol {
++                    anchors.centerIn: parent
++                    text: apiKeyField.revealed ? "visibility_off" : "visibility"
++                    iconSize: Appearance.font.pixelSize.larger
++                    color: Appearance.colors.colOnSecondaryContainer
++                }
++                StyledToolTip { text: apiKeyField.revealed ? Translation.tr("Hide") : Translation.tr("Show") }
+             }
+         }
+     }
+@@ -67,24 +138,6 @@ ContentPage {
          }
      }
  

@@ -1,5 +1,5 @@
 diff --git a/dots/.config/quickshell/ii/modules/common/Config.qml b/dots/.config/quickshell/ii/modules/common/Config.qml
-index 5fcd1bbd..e25b9332 100644
+index 5fcd1bbd..5a220537 100644
 --- a/dots/.config/quickshell/ii/modules/common/Config.qml
 +++ b/dots/.config/quickshell/ii/modules/common/Config.qml
 @@ -78,34 +78,11 @@ Singleton {
@@ -89,7 +89,19 @@ index 5fcd1bbd..e25b9332 100644
                  }
                  property list<string> screenList: [] // List of names, like "eDP-1", find out with 'hyprctl monitors' command
                  property JsonObject utilButtons: JsonObject {
-@@ -301,7 +289,7 @@ Singleton {
+@@ -294,6 +282,11 @@ Singleton {
+ 
+             property JsonObject calendar: JsonObject {
+                 property string locale: "en-GB"
++                property JsonObject holidays: JsonObject {
++                    property bool enable: true
++                    property string apiUrl: "" // Vacío = https://www.festivos.com.co/api/v1/festivos
++                    property int fetchIntervalDays: 1
++                }
+             }
+ 
+             property JsonObject cheatsheet: JsonObject {
+@@ -301,7 +294,7 @@ Singleton {
                  // 0: 󰖳  | 1: 󰌽 | 2: 󰘳 | 3:  | 4: 󰨡
                  // 5:  | 6:  | 7: 󰣇 | 8:  | 9: 
                  // 10:  | 11:  | 12:  | 13:  | 14: 󱄛
@@ -98,7 +110,7 @@ index 5fcd1bbd..e25b9332 100644
                  property bool useMacSymbol: false
                  property bool splitButtons: false
                  property bool useMouseSymbol: false
-@@ -334,6 +322,17 @@ Singleton {
+@@ -334,6 +327,17 @@ Singleton {
                  property list<string> ignoredAppRegexes: []
              }
  
@@ -116,7 +128,7 @@ index 5fcd1bbd..e25b9332 100644
              property JsonObject interactions: JsonObject {
                  property JsonObject scrolling: JsonObject {
                      property bool fasterTouchpadScroll: false // Enable faster scrolling with touchpad
-@@ -347,7 +346,7 @@ Singleton {
+@@ -347,7 +351,7 @@ Singleton {
              }
  
              property JsonObject language: JsonObject {
@@ -125,7 +137,7 @@ index 5fcd1bbd..e25b9332 100644
                  property JsonObject translator: JsonObject {
                      property string engine: "auto" // Run `trans -list-engines` for available engines. auto should use google
                      property string targetLanguage: "auto" // Run `trans -list-all` for available languages
-@@ -459,6 +458,8 @@ Singleton {
+@@ -459,6 +463,8 @@ Singleton {
              property JsonObject resources: JsonObject {
                  property int updateInterval: 3000
                  property int historyLength: 60
@@ -134,7 +146,7 @@ index 5fcd1bbd..e25b9332 100644
              }
  
              property JsonObject tray: JsonObject {
-@@ -497,21 +498,6 @@ Singleton {
+@@ -497,21 +503,6 @@ Singleton {
  
              property JsonObject sidebar: JsonObject {
                  property bool keepRightSidebarLoaded: true
@@ -156,7 +168,7 @@ index 5fcd1bbd..e25b9332 100644
                  property JsonObject cornerOpen: JsonObject {
                      property bool enable: true
                      property bool bottom: false
-@@ -607,27 +593,6 @@ Singleton {
+@@ -607,27 +598,6 @@ Singleton {
                      property list<string> linkKeywords: ["hentai", "porn", "sukebei", "hitomi.la", "rule34", "gelbooru", "fanbox", "dlsite"]
                  }
              }

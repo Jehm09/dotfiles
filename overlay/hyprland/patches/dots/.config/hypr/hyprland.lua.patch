@@ -1,0 +1,15 @@
+diff --git a/dots/.config/hypr/hyprland.lua b/dots/.config/hypr/hyprland.lua
+index 3e54e8e3..d56bcb91 100644
+--- a/dots/.config/hypr/hyprland.lua
++++ b/dots/.config/hypr/hyprland.lua
+@@ -42,3 +42,9 @@ end
+ 
+ -- Shell overrides --
+ require("hyprland.shellOverrides.main")
++
++
++-- Primary monitor detection --
++hl.on("hyprland.start", function()
++    hl.exec_cmd("xrandr --output DP-3 --primary")
++end)
+\ No newline at end of file

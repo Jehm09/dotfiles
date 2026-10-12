@@ -1,0 +1,21 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/CalendarWidget.qml b/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/CalendarWidget.qml
+index 002a9e31..65c58297 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/CalendarWidget.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/CalendarWidget.qml
+@@ -11,6 +11,8 @@ Item {
+     property int monthShift: 0
+     property var viewingDate: CalendarLayout.getDateInXMonthsTime(monthShift)
+     property var calendarLayout: CalendarLayout.getCalendarLayout(viewingDate, monthShift === 0)
++    onViewingDateChanged: Holidays.ensureYear(viewingDate.getFullYear())
++    Component.onCompleted: Holidays.ensureYear(viewingDate.getFullYear())
+     width: calendarColumn.width
+     implicitHeight: calendarColumn.height + 10 * 2
+ 
+@@ -114,6 +116,7 @@ Item {
+                     delegate: CalendarDayButton {
+                         day: calendarLayout[modelData][index].day
+                         isToday: calendarLayout[modelData][index].today
++                        date: calendarLayout[modelData][index].date
+                     }
+                 }
+             }

@@ -1,8 +1,12 @@
 diff --git a/dots/.config/quickshell/ii/shell.qml b/dots/.config/quickshell/ii/shell.qml
-index 13cf7af4..4ffb2380 100644
+index 13cf7af4..1df9d28b 100644
 --- a/dots/.config/quickshell/ii/shell.qml
 +++ b/dots/.config/quickshell/ii/shell.qml
-@@ -33,45 +33,16 @@ ShellRoot {
+@@ -30,48 +30,20 @@ ShellRoot {
+         Cliphist.refresh()
+         Wallpapers.load()
+         Updates.load()
++        Holidays.load()
      }
  
  
