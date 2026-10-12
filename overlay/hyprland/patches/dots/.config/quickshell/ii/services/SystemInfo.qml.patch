@@ -1,5 +1,5 @@
 diff --git a/dots/.config/quickshell/ii/services/SystemInfo.qml b/dots/.config/quickshell/ii/services/SystemInfo.qml
-index ac540d53..fa3ffab5 100644
+index d187204e..27277b9f 100644
 --- a/dots/.config/quickshell/ii/services/SystemInfo.qml
 +++ b/dots/.config/quickshell/ii/services/SystemInfo.qml
 @@ -23,6 +23,13 @@ Singleton {
