@@ -1,15 +1,15 @@
 diff --git a/dots/.config/hypr/hyprland.lua b/dots/.config/hypr/hyprland.lua
-index 3e54e8e3..d56bcb91 100644
+index 3e54e8e3..2bab317f 100644
 --- a/dots/.config/hypr/hyprland.lua
 +++ b/dots/.config/hypr/hyprland.lua
-@@ -42,3 +42,9 @@ end
+@@ -42,3 +42,10 @@ end
  
  -- Shell overrides --
  require("hyprland.shellOverrides.main")
 +
 +
-+-- Primary monitor detection --
-+hl.on("hyprland.start", function()
-+    hl.exec_cmd("xrandr --output DP-3 --primary")
-+end)
-\ No newline at end of file
++-- Monitor primario de XWayland (Steam/juegos X11): primero de display.order, por EDID
++local setXwaylandPrimary = "$HOME/.config/hypr/hyprland/scripts/display/set-xwayland-primary.sh"
++for _, event in ipairs({ "hyprland.start", "monitor.added", "monitor.layout_changed" }) do
++    hl.on(event, function() hl.exec_cmd(setXwaylandPrimary) end)
++end

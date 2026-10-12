@@ -10,7 +10,8 @@ if [[ -f "$LOCK" ]] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
     exit 0
 fi
 echo $$ > "$LOCK"
-trap 'rm -f "$LOCK"; kill 0 2>/dev/null' EXIT INT TERM
+# Solo los hijos propios: `kill 0` mataría el grupo de procesos de Hyprland (incluido start-hyprland).
+trap 'rm -f "$LOCK"; pkill -P $$ 2>/dev/null' EXIT INT TERM
 
 command -v inotifywait >/dev/null 2>&1 || {
     notify-send "hypridle-watch" "inotifywait no instalado (paquete inotify-tools)" -u critical 2>/dev/null

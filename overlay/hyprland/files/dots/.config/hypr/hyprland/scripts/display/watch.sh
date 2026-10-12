@@ -7,6 +7,7 @@ source "$DIR/../env.sh"
 CFG="$CONFIG_JSON"
 APPLY_MON="$DIR/apply-monitors.sh"
 APPLY_WS="$DIR/apply-workspaces.sh"
+SET_PRIMARY="$DIR/set-xwayland-primary.sh"
 LOCK="/run/user/$(id -u)/hypr-display-watch.pid"
 
 # Single-instance: si el PID anterior sigue vivo, salimos.
@@ -14,7 +15,8 @@ if [[ -f "$LOCK" ]] && kill -0 "$(cat "$LOCK" 2>/dev/null)" 2>/dev/null; then
     exit 0
 fi
 echo $$ > "$LOCK"
-trap 'rm -f "$LOCK"; kill 0 2>/dev/null' EXIT INT TERM
+# Solo los hijos propios: `kill 0` mataría el grupo de procesos de Hyprland (incluido start-hyprland).
+trap 'rm -f "$LOCK"; pkill -P $$ 2>/dev/null' EXIT INT TERM
 
 command -v inotifywait >/dev/null 2>&1 || {
     notify-send "display-watch" "inotifywait no instalado (paquete inotify-tools)" -u critical 2>/dev/null
@@ -63,6 +65,7 @@ while read -r fname; do
 
     if $monitors_changed; then
         "$APPLY_MON" 2>/dev/null
+        "$SET_PRIMARY" 2>/dev/null   # el primario sigue a display.order
     fi
 
     # Reglas para disparar init.sh:
