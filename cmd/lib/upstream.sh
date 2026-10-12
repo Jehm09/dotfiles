@@ -538,9 +538,15 @@ cmd_deps() {
     # Matching pkgrel is necessary but not sufficient: a qt6-base bump breaks
     # the build without moving the pin, so the runtime has to be asked whether
     # it still loads before this is called done.
+    #
+    # Upstream does not always bump pkgrel either (7511545 -> 4f508be kept
+    # pkgrel=8), so a recorded pin that differs from the tree's wins over it.
+    # Same for the cached package below: it was built from the recorded pin.
+    local stale=false
+    _pin_is_stale && stale=true
     expected="$(basename "$(cd "$pkgdir" && makepkg --packagelist 2>/dev/null | head -1)")"
     have="$(pacman -Q illogical-impulse-quickshell-git 2>/dev/null | awk '{print $2}')"
-    if [[ $force == false && -n "$have" && "$expected" == *"-$have-"* ]]; then
+    if [[ $force == false && $stale == false && -n "$have" && "$expected" == *"-$have-"* ]]; then
         if _abi_ok; then
             echo "$pinned" >"$CACHE_DIR/$_PIN_FILE_REL"
             success "Already at ${pinned:0:8} (installed $have) — nothing to build."
@@ -555,7 +561,7 @@ cmd_deps() {
     # compile into a few seconds, which is the difference between a restore that
     # is worth doing and one that gets skipped.
     cached="$pkgdir/$expected"
-    if [[ $force == false ]] && _prebuilt_is_current "$cached"; then
+    if [[ $force == false && $stale == false ]] && _prebuilt_is_current "$cached"; then
         info "Reusing the cached build: $expected (newer than qt6-base)"
         if sudo pacman -U --noconfirm "$cached"; then
             echo "$pinned" >"$CACHE_DIR/$_PIN_FILE_REL"
