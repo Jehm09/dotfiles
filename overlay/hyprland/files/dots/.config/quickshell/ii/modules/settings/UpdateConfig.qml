@@ -64,14 +64,24 @@ ContentPage {
         return Translation.tr("Up to date (%1)").arg(status.upstreamHead);
     }
 
+    // quickshell es el único paquete que end-4 fija a un commit; el resto va por pacman/yay.
     readonly property string runtimeText: {
         if (!status?.ok) return "…";
+        const installed = `${shortSha(status.installedPin)} (${status.installedVersion})`;
         switch (status.runtime) {
-        case "ok": return Translation.tr("Current: %1 (%2)").arg(shortSha(status.installedPin)).arg(status.installedVersion);
-        case "stale": return Translation.tr("Rebuild needed: pinned %1, installed %2").arg(shortSha(status.pinned)).arg(shortSha(status.installedPin));
-        case "abi": return Translation.tr("Rebuild needed: it no longer loads with the installed Qt");
+        case "ok": return installed;
+        case "stale": return Translation.tr("%1 — rebuild needed, your merged end-4 pins %2").arg(installed).arg(shortSha(status.pinned));
+        case "abi": return Translation.tr("%1 — rebuild needed, it no longer loads with the installed Qt").arg(installed);
         default: return Translation.tr("Installed build is not tracked — Update will rebuild it");
         }
+    }
+
+    readonly property string upstreamPinText: {
+        if (!status?.ok || !status.upstreamPin) return "…";
+        const pin = shortSha(status.upstreamPin);
+        const suffix = status.fetched ? "" : ` ${Translation.tr("(last known)")}`;
+        if (status.upstreamPin === status.installedPin) return Translation.tr("%1 — same as installed").arg(pin) + suffix;
+        return Translation.tr("%1 — different from installed, Update installs it").arg(pin) + suffix;
     }
 
     readonly property bool updateAdvised: (status?.ok ?? false)
@@ -205,6 +215,11 @@ ContentPage {
             icon: "memory"
             label: Translation.tr("quickshell")
             value: page.runtimeText
+        }
+        InfoRow {
+            icon: "push_pin"
+            label: Translation.tr("end-4 pins")
+            value: page.upstreamPinText
         }
         InfoRow {
             visible: page.status?.dirty || page.status?.merging || false

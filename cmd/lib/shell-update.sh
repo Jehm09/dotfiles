@@ -24,7 +24,9 @@ source "$DOTFILES_DIR/cmd/lib/utils.sh"
 
 SETUP="$DOTFILES_DIR/setup"
 CLONE="${DOTFILES_UPSTREAM_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/dotfiles/upstream}"
-PKGBUILD="$CLONE/sdata/dist-arch/illogical-impulse-quickshell-git/PKGBUILD"
+# quickshell is the only package end-4 pins to a commit; the rest follow pacman/yay.
+PKGBUILD_REL="sdata/dist-arch/illogical-impulse-quickshell-git/PKGBUILD"
+PKGBUILD="$CLONE/$PKGBUILD_REL"
 PIN_FILE="$CLONE/.git/dotfiles-quickshell-pin"
 LOCK_FILE="$DOTFILES_DIR/overlay/hyprland/upstream.lock"
 RUNTIME_PKG="illogical-impulse-quickshell-git"
@@ -249,13 +251,16 @@ cmd_status() {
         return 0
     fi
 
-    local fetched=true merging=false dirty=false abi=true running=false behind head
+    local fetched=true merging=false dirty=false abi=true running=false behind head upstream_pin
     # The state file alone says "running" forever if the terminal was closed mid-run;
     # the lock is only held while a run is actually alive.
     if [[ -e "$RUN_LOCK" ]] && ! flock -n "$RUN_LOCK" true; then running=true; fi
     timeout 30 git -C "$CLONE" fetch -q origin 2>/dev/null || fetched=false
     behind="$(git -C "$CLONE" rev-list --count mine..origin/main 2>/dev/null || echo 0)"
     head="$(git -C "$CLONE" rev-parse --short=7 origin/main 2>/dev/null || true)"
+    # The pin in end-4's latest code, which Update would bring in.
+    upstream_pin="$(git -C "$CLONE" show "origin/main:$PKGBUILD_REL" 2>/dev/null \
+        | awk -F"'" '/^_commit=/ {print $2; exit}' || true)"
     [[ -f "$CLONE/.git/MERGE_HEAD" ]] && merging=true
     [[ -n "$(git -C "$CLONE" status --porcelain 2>/dev/null)" ]] && dirty=true
     _abi_ok || abi=false
@@ -263,12 +268,12 @@ cmd_status() {
     jq -n --arg repo "$DOTFILES_DIR" --arg clone "$CLONE" \
         --arg locked "$(_locked)" --arg upstreamHead "$head" --argjson behind "$behind" \
         --argjson fetched "$fetched" --argjson dirty "$dirty" --argjson merging "$merging" \
-        --arg pinned "$(_pinned)" --arg installedPin "$(_installed_pin)" \
+        --arg pinned "$(_pinned)" --arg upstreamPin "$upstream_pin" --arg installedPin "$(_installed_pin)" \
         --arg installedVersion "$(pacman -Q "$RUNTIME_PKG" 2>/dev/null | awk '{print $2}' || true)" \
         --argjson abiOk "$abi" --argjson running "$running" \
         '{ok: true, running: $running, repo: $repo, clone: $clone, locked: $locked, upstreamHead: $upstreamHead,
           behind: $behind, fetched: $fetched, dirty: $dirty, merging: $merging,
-          pinned: $pinned, installedPin: $installedPin, installedVersion: $installedVersion,
+          pinned: $pinned, upstreamPin: $upstreamPin, installedPin: $installedPin, installedVersion: $installedVersion,
           abiOk: $abiOk,
           runtime: (if ($abiOk | not) then "abi"
                     elif $installedPin == "" then "untracked"
