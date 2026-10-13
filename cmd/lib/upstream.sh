@@ -53,6 +53,11 @@ PATCHES_DIR="$OVERLAY_DIR/patches"
 CACHE_DIR="${DOTFILES_UPSTREAM_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/dotfiles/upstream}"
 DEFAULT_URL="https://github.com/end-4/dots-hyprland.git"
 
+# Lets the quickshell Update page find this repo's `setup` without a hardcoded path.
+if [[ -d "$CACHE_DIR/.git" ]]; then
+    echo "$DOTFILES_DIR" >"$CACHE_DIR/.git/dotfiles-repo-dir" 2>/dev/null || true
+fi
+
 # Only this prefix of the upstream repo is ours to care about. Everything else
 # (setup, sdata, dots-extra, licenses) stays upstream's business.
 TRACKED_PREFIX="dots/.config"

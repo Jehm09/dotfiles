@@ -590,8 +590,9 @@ ContentPage {
         color: Appearance.m3colors.m3surfaceContainerLow
         onClosing: root.layoutEditorOpen = false
 
-        readonly property int canvasWidth: Math.max(600, width - 80)
-        readonly property int canvasHeight: Math.max(360, height - 260)
+        // El lienzo ocupa lo que deja el layout: así nunca desborda la ventana.
+        readonly property int canvasWidth: Math.max(1, canvas.width)
+        readonly property int canvasHeight: Math.max(1, canvas.height)
         readonly property int snapThresholdPx: 30
         readonly property real minZoom: 0.25
         readonly property real maxZoom: 4.0
@@ -765,10 +766,12 @@ ContentPage {
                 anchors.margins: 16
                 spacing: 12
 
+                // Mensaje en su propia fila: en la de controles se encimaba con los botones.
                 RowLayout {
                     Layout.fillWidth: true
                     spacing: 8
                     MaterialSymbol {
+                        Layout.alignment: Qt.AlignTop
                         text: "open_with"
                         color: Appearance.colors.colOnSecondaryContainer
                     }
@@ -779,7 +782,13 @@ ContentPage {
                             : Translation.tr("Drag monitors to arrange. Edges snap to neighbors.")
                         color: Appearance.colors.colOnSecondaryContainer
                         font.weight: Font.Medium
+                        wrapMode: Text.WordWrap
                     }
+                }
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: 8
 
                     // Zoom controls
                     RippleButton {
@@ -802,10 +811,16 @@ ContentPage {
                         text: `${Math.round(editor.zoomMultiplier * 100)}%`
                         color: Appearance.colors.colOnSecondaryContainer
                         MouseArea {
+                            id: zoomResetArea
                             anchors.fill: parent
+                            hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: editor.zoomReset()
-                            StyledToolTip { text: Translation.tr("Reset zoom") }
+                            // MouseArea no tiene `hovered`: sin esto el tooltip queda siempre visible.
+                            StyledToolTip {
+                                extraVisibleCondition: zoomResetArea.containsMouse
+                                text: Translation.tr("Reset zoom")
+                            }
                         }
                     }
                     RippleButton {
@@ -823,7 +838,7 @@ ContentPage {
                         StyledToolTip { text: Translation.tr("Zoom in") }
                     }
 
-                    Item { implicitWidth: 8 }
+                    Item { Layout.fillWidth: true }
 
                     RippleButtonWithIcon {
                         implicitWidth: 100
@@ -853,9 +868,9 @@ ContentPage {
 
                 Rectangle {
                     id: canvas
-                    Layout.alignment: Qt.AlignHCenter
-                    implicitWidth: editor.canvasWidth
-                    implicitHeight: editor.canvasHeight
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    Layout.minimumHeight: 160
                     radius: Appearance.rounding.small
                     color: Appearance.m3colors.m3surfaceContainerLow
                     border.color: Appearance.m3colors.m3outline

@@ -24,6 +24,8 @@
 #   setup update runtime [--force]         Rebuild/reinstall pinned quickshell
 #   setup update pkgs --hyprland           Reinstall from packages/*.conf
 #   setup update dotfiles --hyprland       Re-link ~/.config
+#   setup update shell [--status]          end4 + commit + runtime + push in one
+#                                          run (cmd/lib/shell-update.sh)
 
 set -Eeuo pipefail
 
@@ -37,6 +39,7 @@ SETUP="$DOTFILES_DIR/setup"
 # need it; the rest do not, so it is validated per mode rather than up front.
 _desktop=""
 _passthru=()
+_shell_args=()
 
 _require_desktop() {
     [[ -n "$_desktop" ]] && return 0
@@ -107,7 +110,9 @@ cmd_end4() {
     "$SETUP" upstream update
     "$SETUP" upstream export
 
-    if git -C "$DOTFILES_DIR" diff --quiet -- overlay; then
+    # --porcelain, not diff --quiet: a merge that only adds files leaves them
+    # untracked under overlay/, which diff does not see.
+    if [[ -z "$(git -C "$DOTFILES_DIR" status --porcelain -- overlay)" ]]; then
         success "Overlay unchanged — nothing new from end-4"
         return 0
     fi
@@ -125,6 +130,10 @@ cmd_pkgs() {
     _require_desktop
     step "4. Packages from this repo"
     "$SETUP" post --pkgs "--$_desktop"
+}
+
+cmd_shell() {
+    exec bash "$DOTFILES_DIR/cmd/lib/shell-update.sh" "${_shell_args[@]}"
 }
 
 cmd_dotfiles() {
@@ -163,6 +172,9 @@ Routine maintenance. 'post' builds the machine; this keeps it current.
     runtime [--force] Reinstall the quickshell build end-4 pins
     pkgs              Reinstall from packages/*.conf (needs a desktop)
     dotfiles          Re-link ~/.config (needs a desktop)
+    shell [--status]  end4 + commit overlay/ + runtime + push in one run, aborting
+                      on merge conflicts (what the quickshell Update page runs).
+                      --status prints a JSON snapshot and changes nothing
 
 Why the order is fixed:
 
@@ -188,6 +200,7 @@ while [[ $# -gt 0 ]]; do
         --hyprland) _desktop="hyprland" ;;
         --kde)      _desktop="kde"      ;;
         --force)    _passthru+=("--force") ;;
+        --status)   _shell_args+=("--status") ;;
         -h|--help)  _usage; exit 0 ;;
         -*)         error "Unknown option: $1"; error "See: setup update --help"; exit 1 ;;
         *)
@@ -209,6 +222,7 @@ case "$_mode" in
     runtime)   cmd_runtime  ;;
     pkgs)      cmd_pkgs     ;;
     dotfiles)  cmd_dotfiles ;;
+    shell)     cmd_shell    ;;
     ""|help)   _usage       ;;
     *) error "Unknown subcommand: $_mode"; _usage; exit 1 ;;
 esac

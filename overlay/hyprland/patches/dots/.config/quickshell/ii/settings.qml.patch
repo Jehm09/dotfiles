@@ -1,5 +1,5 @@
 diff --git a/dots/.config/quickshell/ii/settings.qml b/dots/.config/quickshell/ii/settings.qml
-index 65c64c16..45e6b3b8 100644
+index 65c64c16..6f7d45a5 100644
 --- a/dots/.config/quickshell/ii/settings.qml
 +++ b/dots/.config/quickshell/ii/settings.qml
 @@ -28,6 +28,11 @@ ApplicationWindow {
@@ -14,7 +14,7 @@ index 65c64c16..45e6b3b8 100644
          {
              name: Translation.tr("General"),
              icon: "browse",
-@@ -54,6 +59,11 @@ ApplicationWindow {
+@@ -54,11 +59,21 @@ ApplicationWindow {
              icon: "settings",
              component: "modules/settings/ServicesConfig.qml"
          },
@@ -26,7 +26,17 @@ index 65c64c16..45e6b3b8 100644
          {
              name: Translation.tr("Advanced"),
              icon: "construction",
-@@ -182,10 +192,10 @@ ApplicationWindow {
+             component: "modules/settings/AdvancedConfig.qml"
+         },
++        {
++            name: Translation.tr("Update"),
++            icon: "system_update_alt",
++            component: "modules/settings/UpdateConfig.qml"
++        },
+         {
+             name: Translation.tr("About"),
+             icon: "info",
+@@ -182,10 +197,10 @@ ApplicationWindow {
                          buttonText: justCopied ? Translation.tr("Path copied") : Translation.tr("Config file")
                          expanded: navRail.expanded
                          downAction: () => {
@@ -39,3 +49,73 @@ index 65c64c16..45e6b3b8 100644
                              fab.justCopied = true;
                              revertTextTimer.restart()
                          }
+@@ -203,27 +218,51 @@ ApplicationWindow {
+                         }
+                     }
+ 
+-                    NavigationRailTabArray {
+-                        currentIndex: root.currentPage
+-                        expanded: navRail.expanded
+-                        Repeater {
+-                            model: root.pages
+-                            NavigationRailButton {
+-                                required property var index
+-                                required property var modelData
+-                                toggled: root.currentPage === index
+-                                onPressed: root.currentPage = index;
+-                                expanded: navRail.expanded
+-                                buttonIcon: modelData.icon
+-                                buttonIconRotation: modelData.iconRotation || 0
+-                                buttonText: modelData.name
+-                                showToggledHighlight: false
++                    // Solo las pestañas scrollean: con muchas páginas la lista no cabe en la ventana.
++                    StyledFlickable {
++                        id: navTabsFlickable
++                        Layout.fillHeight: true
++                        Layout.topMargin: 25
++                        implicitWidth: navTabs.implicitWidth
++                        clip: true
++                        contentWidth: width
++                        contentHeight: navTabs.implicitHeight
++                        interactive: contentHeight > height
++
++                        NavigationRailTabArray {
++                            id: navTabs
++                            width: navTabsFlickable.width
++                            currentIndex: root.currentPage
++                            expanded: navRail.expanded
++                            Repeater {
++                                model: root.pages
++                                NavigationRailButton {
++                                    required property var index
++                                    required property var modelData
++                                    toggled: root.currentPage === index
++                                    onPressed: root.currentPage = index;
++                                    expanded: navRail.expanded
++                                    buttonIcon: modelData.icon
++                                    buttonIconRotation: modelData.iconRotation || 0
++                                    buttonText: modelData.name
++                                    showToggledHighlight: false
++                                }
+                             }
+                         }
+-                    }
+ 
+-                    Item {
+-                        Layout.fillHeight: true
++                        // Mantiene visible la pestaña activa al cambiar con Ctrl+PgUp/PgDn/Tab.
++                        Connections {
++                            target: root
++                            function onCurrentPageChanged() {
++                                const itemHeight = navTabs.implicitHeight / Math.max(1, root.pages.length);
++                                const top = itemHeight * root.currentPage;
++                                const f = navTabsFlickable;
++                                if (top < f.contentY)
++                                    f.contentY = top;
++                                else if (top + itemHeight > f.contentY + f.height)
++                                    f.contentY = Math.min(top + itemHeight - f.height, Math.max(0, f.contentHeight - f.height));
++                            }
++                        }
+                     }
+                 }
+             }
