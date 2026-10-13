@@ -28,6 +28,8 @@ PKGBUILD="$CLONE/sdata/dist-arch/illogical-impulse-quickshell-git/PKGBUILD"
 PIN_FILE="$CLONE/.git/dotfiles-quickshell-pin"
 LOCK_FILE="$DOTFILES_DIR/overlay/hyprland/upstream.lock"
 RUNTIME_PKG="illogical-impulse-quickshell-git"
+# Settings rewrites it on every change; Joe wants it committed whatever its state.
+SETTINGS_JSON="dots/hyprland/.config/settings/quickshell/config.json"
 
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/dotfiles"
 STATE_FILE="$STATE_DIR/shell-update.json"
@@ -123,16 +125,18 @@ _preflight() {
     success "Dotfiles repo is on main and up to date with origin"
 }
 
-# Commits only overlay/ — `git commit -- <path>` leaves anything else staged or
-# modified in the repo (config.json, fish_variables...) out of it.
-_commit_overlay() {
-    if [[ -z "$(git -C "$DOTFILES_DIR" status --porcelain -- overlay)" ]]; then
-        success "overlay/ unchanged — nothing to commit"
+# Commits only the given paths — `git commit -- <path>` leaves anything else
+# staged or modified in the repo (fish_variables...) out of it.
+_commit_paths() {   # _commit_paths <message> <path...>
+    local message="$1"
+    shift
+    if [[ -z "$(git -C "$DOTFILES_DIR" status --porcelain -- "$@")" ]]; then
+        success "$* unchanged — nothing to commit"
         return 0
     fi
-    git -C "$DOTFILES_DIR" add -A -- overlay
-    git -C "$DOTFILES_DIR" commit -q -m "$1" -- overlay
-    success "Committed: $1"
+    git -C "$DOTFILES_DIR" add -A -- "$@"
+    git -C "$DOTFILES_DIR" commit -q -m "$message" -- "$@"
+    success "Committed: $message"
 }
 
 _abort_conflict() {
@@ -197,10 +201,11 @@ cmd_run() {
     _phase "Save local edits"
     if [[ -n "$(git -C "$CLONE" status --porcelain)" ]]; then
         "$SETUP" upstream export
-        _commit_overlay "chore(overlay): guardar cambios locales antes de actualizar end-4"
+        _commit_paths "chore(overlay): guardar cambios locales antes de actualizar end-4" overlay
     else
         success "No local edits in the clone"
     fi
+    _commit_paths "chore(settings): guardar config de quickshell" "$SETTINGS_JSON"
 
     _phase "Merge end-4"
     if ! "$SETUP" upstream update; then
@@ -213,7 +218,7 @@ cmd_run() {
     local locked pinned
     locked="$(_locked)"
     pinned="$(_pinned)"
-    _commit_overlay "chore(upstream): actualizar end-4 a ${locked:0:7} (quickshell ${pinned:0:7})"
+    _commit_paths "chore(upstream): actualizar end-4 a ${locked:0:7} (quickshell ${pinned:0:7})" overlay
 
     _phase "Runtime (quickshell)"
     local before after

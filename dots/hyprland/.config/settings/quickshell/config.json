@@ -225,7 +225,7 @@
       },
       {
         "desc": "LG Electronics LG HDR WFHD 0x00017F08",
-        "enabled": true,
+        "enabled": false,
         "height": 1080,
         "name": "DP-2",
         "refreshRate": 74.99,
