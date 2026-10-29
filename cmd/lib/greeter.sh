@@ -196,6 +196,8 @@ _greetd_pin_output() {
         echo "# matched against Hyprland's monitor description at every greeter start."
         printf '%s\n' "$@"
     } | sudo tee "$GREETD_OUTPUT_FILE" >/dev/null
+    # Root-owned = pinned: sync-greeter-output.sh only writes a file you own.
+    sudo chown root:root "$GREETD_OUTPUT_FILE"
 
     connected="$(_connected_descriptions)"
     for desc in "$@"; do
@@ -210,6 +212,30 @@ _greetd_pin_output() {
 _greetd_unpin_output() {
     sudo rm -f "$GREETD_OUTPUT_FILE"
     success "greetd: not pinned — the greeter lands on the first enabled output"
+}
+
+# Default when GREETER_OUTPUT is empty: the greeter uses the same monitor order
+# as the session (display.order in quickshell's config.json; first = main).
+# The file is handed to you so the Hyprland display scripts can rewrite it
+# whenever that order changes, without sudo.
+GREETD_ORDER_SYNC="$HOME/.config/hypr/hyprland/scripts/display/sync-greeter-output.sh"
+
+_greetd_follow_display_order() {
+    if [[ ! -x "$GREETD_ORDER_SYNC" ]]; then
+        warn "No Hyprland display scripts ($GREETD_ORDER_SYNC) — cannot follow display.order"
+        _greetd_unpin_output
+        return 0
+    fi
+    sudo install -m644 -o "$USER" -g "$(id -gn)" /dev/null "$GREETD_OUTPUT_FILE"
+    "$GREETD_ORDER_SYNC"
+    local main
+    main="$(grep -vE '^[[:space:]]*(#|$)' "$GREETD_OUTPUT_FILE" | head -1)"
+    if [[ -n "$main" ]]; then
+        success "greeter follows display.order — main: '$main'"
+    else
+        warn "display.order has no enabled monitor"
+        _greetd_unpin_output
+    fi
 }
 
 _restrict_output() {
@@ -440,8 +466,8 @@ _greetd_configure() {
 
     _install_greeter_config
 
-    # Output selection — opt-in only, see GREETER_OUTPUT. Stored as a
-    # description; the greeter config matches it at each start.
+    # Output selection. Stored as descriptions; the greeter config matches them
+    # at each start. GREETER_OUTPUT pins it; empty means follow display.order.
     if [[ -n "$GREETER_OUTPUT" ]]; then
         # Accepts several monitors separated by ';', most wanted first, each a
         # connector name or a description. Names are converted to descriptions.
@@ -449,10 +475,9 @@ _greetd_configure() {
         mapfile -t descs < <(_output_descriptions "$GREETER_OUTPUT")
         _greetd_pin_output "${descs[@]}"
         local_conf_set GREETER_OUTPUT "$(printf '%s;' "${descs[@]}" | sed 's/;$//')"
-    elif [[ -n "${_PREV_OUTPUT:-}" ]]; then
-        # Was pinned, now explicitly empty: that is a request to unpin.
-        _greetd_unpin_output
-        local_conf_set GREETER_OUTPUT ""
+    else
+        [[ -n "${_PREV_OUTPUT:-}" ]] && local_conf_set GREETER_OUTPUT ""
+        _greetd_follow_display_order
     fi
 
     # Matches what the sysc-greet-hyprland package writes on install
@@ -657,6 +682,11 @@ cmd_check() {
     echo "      connected: $(_connected_outputs | tr '\n' ' ')"
 
     connected="$(_connected_descriptions)"
+    if [[ -O "$GREETD_OUTPUT_FILE" ]]; then
+        info "follows display.order (synced by the Hyprland display scripts)"
+    elif [[ -r "$GREETD_OUTPUT_FILE" ]]; then
+        info "pinned by GREETER_OUTPUT — drop it from local.conf and 'setup greeter apply' to follow display.order"
+    fi
     if [[ ! -r "$GREETD_OUTPUT_FILE" ]]; then
         info "not pinned — the greeter lands on the first enabled output"
         info "Pin it with: GREETER_OUTPUT=DP-3 setup greeter apply"

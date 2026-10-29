@@ -81,6 +81,9 @@ live_enabled() { grep -qxF "$1" <<<"$LIVE_ON"; }
     done
 } > "${MONITORS_LUA}.tmp" && mv "${MONITORS_LUA}.tmp" "$MONITORS_LUA"
 
+# El greeter sigue el mismo orden: el primero es su monitor.
+"$(dirname "${BASH_SOURCE[0]}")/sync-greeter-output.sh"
+
 # diff_gt a b eps -> retorna 0 (true) si |a-b| > eps.
 diff_gt() {
     awk -v a="$1" -v b="$2" -v eps="$3" 'BEGIN { d=(a-b); if (d<0) d=-d; exit (d>eps ? 0 : 1) }'
