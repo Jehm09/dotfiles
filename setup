@@ -54,7 +54,7 @@ Subcommands:
                   rescue | status | remove  ('setup grub --help')
 
     greeter       Login screen — SDDM (themed, graphical) or greetd + sysc-greet
-                  (console, Cagebreak). Only one can be enabled.
+                  (console, Hyprland). Only one can be enabled.
                   sddm | greetd | apply | test | status  ('setup greeter --help')
 
 Aliases:

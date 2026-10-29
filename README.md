@@ -211,7 +211,7 @@ is a single symlink, so only one can be enabled:
 |---|---|---|
 | What | Graphical Qt login | Console greeter |
 | Theme | [sddm-astronaut-theme](https://github.com/Keyitdev/sddm-astronaut-theme), `hyprland_kath` | none |
-| Runs under | weston (kiosk shell) | Cagebreak |
+| Runs under | weston (kiosk shell) | Hyprland |
 | Packages | `deps-greeter-sddm.conf` | `deps-greeter-greetd.conf` |
 | Needs seatd | no — uses logind | yes |
 | Good when | you want a themed login and switch sessions often | the GPU makes SDDM's weston greeter misbehave, or you want something lighter |
@@ -421,7 +421,7 @@ dotfiles/
     ├── deps-quickshell.conf Quickshell runtime + widget backends
     ├── deps-kde.conf        KDE Plasma desktop + Krohnkite tiling
     ├── deps-greeter-sddm.conf    SDDM + the astronaut login theme
-    ├── deps-greeter-greetd.conf  greetd + sysc-greet (Cagebreak)
+    ├── deps-greeter-greetd.conf  greetd + sysc-greet (Hyprland)
     ├── requirements.txt     Python venv for the shell's helper scripts
     ├── modprobe/            Kernel module config installed to /etc/modprobe.d/
     └── hooks/

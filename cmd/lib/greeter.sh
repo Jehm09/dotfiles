@@ -7,8 +7,8 @@
 #   sddm     Graphical Qt login with the astronaut theme. Themed, picks between
 #            the Hyprland and Plasma sessions, but its Wayland greeter runs
 #            under weston and is fussy about GPUs and multi-head layouts.
-#   greetd   Console greeter (sysc-greet, Cagebreak variant). Lighter, no
-#            compositor quirks, no theming.
+#   greetd   Console greeter (sysc-greet, Hyprland variant). Lighter, runs
+#            under the same compositor as the session, no theming.
 #
 # SDDM's greeter has three failure modes that all look like "it does not start",
 # and all three are handled here rather than left to be rediscovered:
@@ -59,7 +59,7 @@ THEME_VARIANT="hyprland_kath"
 CONF_D="/etc/sddm.conf.d"
 WESTON_INI="/etc/sddm/weston.ini"
 GREETD_CONF="/etc/greetd/config.toml"
-CAGEBREAK_CONF="/etc/greetd/cagebreak-greeter-config"
+HYPRLAND_GREETER_CONF="/etc/greetd/hyprland-greeter-config.lua"
 
 # SDDM draws no pointer at all unless told which theme to use — there is no
 # fallback, it is simply invisible. Matches what Hyprland sets in
@@ -138,29 +138,31 @@ _require_rescue() {
 # about.
 # Put the greeter on one output.
 #
-# The pin is stored as the monitor's EDID description, and turned into whatever
-# connector that monitor has at the moment the greeter starts — cagebreak can
-# only address outputs by name, and names move. Writing `output DP-5 prio 10`
-# into a file once is how the login screen ended up on a TV that is normally off
-# after nvidia-open renumbered DP-4/DP-5 into DP-2/DP-3.
-#
-# Only `prio` is ever emitted (by the launcher). Not `disable`, and not
-# pos/res/rate:
-#   output <other> disable  -> the greeter exits with
-#                              "EGL: Failed to initialize EGL" and greetd loops.
-#                              Reproduced on this machine; cause not understood.
-#   output <name> pos ... res ... rate ...  -> same failure.
-# `prio <n>` leaves every output enabled and only reorders them, and the greeter
-# lands on the first. The others stay lit — that is the trade-off for a greeter
-# that actually starts.
+# The pin is stored as the monitor's EDID description — connector names move:
+# writing "DP-5" into a file once is how the login screen ended up on a TV that
+# is normally off, after nvidia-open renumbered DP-4/DP-5 into DP-2/DP-3.
+# Hyprland reports the same description, so the greeter config
+# (cmd/greeter/hyprland-greeter-config.lua) matches it directly at every start
+# and opens the login on the first one connected. The other outputs stay lit
+# with the wallpaper.
 GREETD_OUTPUT_FILE=/etc/greetd/greeter-output
-GREETD_LAUNCHER=/usr/local/bin/greeter-start-cagebreak
-GREETD_RESOLVER=/usr/local/bin/greeter-resolve-output
 
-_install_greeter_helpers() {
-    local src="$DOTFILES_DIR/cmd/greeter"
-    sudo install -Dm755 "$src/greeter-resolve-output" "$GREETD_RESOLVER"
-    sudo install -Dm755 "$src/greeter-start-cagebreak" "$GREETD_LAUNCHER"
+# Left behind by the Cagebreak variant, which needed a wrapper to turn the
+# description into a connector name. Removed on apply.
+_LEGACY_GREETER_FILES=(
+    /usr/local/bin/greeter-start-cagebreak
+    /usr/local/bin/greeter-resolve-output
+)
+
+_install_greeter_config() {
+    sudo install -Dm644 "$DOTFILES_DIR/cmd/greeter/hyprland-greeter-config.lua" "$HYPRLAND_GREETER_CONF"
+    sudo rm -f "${_LEGACY_GREETER_FILES[@]}"
+}
+
+# EDID descriptions of the connected monitors, from the running Hyprland session.
+# Empty outside of one (e.g. from a TTY).
+_connected_descriptions() {
+    hyprctl -j monitors all 2>/dev/null | jq -r '.[].description' 2>/dev/null
 }
 
 # Connector name -> EDID description. Passes anything it cannot look up straight
@@ -184,36 +186,29 @@ _output_descriptions() {
     done < <(printf '%s\n' "$1" | tr ';' '\n' | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
 }
 
-# Takes descriptions, most wanted first. Cagebreak cannot mirror, so the greeter
-# still lands on one screen: the first that is connected. The rest are the
-# fallback chain.
+# Takes descriptions, most wanted first. The greeter lands on the first that is
+# connected; the rest are the fallback chain.
 _greetd_pin_output() {
-    local desc
+    local desc connected
     {
         echo "# Monitors the greeter prefers, most wanted first."
-        echo "# Managed by 'setup greeter apply'. These are EDID descriptions:"
-        echo "# the connector name they map to is resolved at every greeter start."
+        echo "# Managed by 'setup greeter apply'. These are EDID descriptions,"
+        echo "# matched against Hyprland's monitor description at every greeter start."
         printf '%s\n' "$@"
     } | sudo tee "$GREETD_OUTPUT_FILE" >/dev/null
 
-    # The launcher emits the output lines now, so drop any block a previous
-    # version wrote into the base config.
-    [[ -f "$CAGEBREAK_CONF" ]] && sudo sed -i \
-        '/^# >>> setup greeter: outputs$/,/^# <<< setup greeter: outputs$/d' "$CAGEBREAK_CONF"
-
+    connected="$(_connected_descriptions)"
     for desc in "$@"; do
-        if "$GREETD_RESOLVER" "$desc" >/dev/null 2>&1; then
-            success "greeter prefers '$desc' (now $("$GREETD_RESOLVER" "$desc"))"
+        if grep -qxF "$desc" <<<"$connected"; then
+            success "greeter prefers '$desc'"
         else
-            warn "'$desc' is not connected right now — kept, it resolves when it is back"
+            warn "'$desc' is not connected right now — kept, it matches when it is back"
         fi
     done
 }
 
 _greetd_unpin_output() {
     sudo rm -f "$GREETD_OUTPUT_FILE"
-    [[ -f "$CAGEBREAK_CONF" ]] && sudo sed -i \
-        '/^# >>> setup greeter: outputs$/,/^# <<< setup greeter: outputs$/d' "$CAGEBREAK_CONF"
     success "greetd: not pinned — the greeter lands on the first enabled output"
 }
 
@@ -410,7 +405,7 @@ cmd_sddm() {
 }
 
 # ------------------------------------------------------------------
-# greetd + sysc-greet (Cagebreak)
+# greetd + sysc-greet (Hyprland)
 # ------------------------------------------------------------------
 # Unlock the login keyring with the login password.
 #
@@ -443,10 +438,10 @@ _greetd_configure() {
     step "greetd configuration"
     sudo mkdir -p "$(dirname "$GREETD_CONF")"
 
-    _install_greeter_helpers
+    _install_greeter_config
 
     # Output selection — opt-in only, see GREETER_OUTPUT. Stored as a
-    # description; the launcher turns it into a connector name at each start.
+    # description; the greeter config matches it at each start.
     if [[ -n "$GREETER_OUTPUT" ]]; then
         # Accepts several monitors separated by ';', most wanted first, each a
         # connector name or a description. Names are converted to descriptions.
@@ -460,22 +455,21 @@ _greetd_configure() {
         local_conf_set GREETER_OUTPUT ""
     fi
 
-    # Matches what the upstream installer writes
-    # (https://github.com/Nomadcxx/sysc-greet), except that greetd launches our
-    # wrapper instead of cagebreak directly — the wrapper resolves the pinned
-    # monitor and then execs cagebreak. -e enables the IPC socket used to quit
-    # cagebreak after login, which is why socat is a dependency.
+    # Matches what the sysc-greet-hyprland package writes on install
+    # (https://github.com/Nomadcxx/sysc-greet). start-hyprland is Hyprland's
+    # own launcher: it restarts the compositor in safe mode if it crashes.
+    #
+    # No [initial_session]: that is greetd's autologin slot and runs WITHOUT
+    # GREETD_SOCK, so a greeter there cannot log anyone in. It used to start one
+    # throwaway greeter per boot that exited at once — and crashed Hyprland on
+    # the way out (aquamarine#383) — before the real default_session took over.
     sudo tee "$GREETD_CONF" >/dev/null <<TOML
 # Managed by 'setup greeter apply'.
 [terminal]
 vt = 1
 
 [default_session]
-command = "$GREETD_LAUNCHER"
-user = "greeter"
-
-[initial_session]
-command = "$GREETD_LAUNCHER"
+command = "start-hyprland -- --config $HYPRLAND_GREETER_CONF"
 user = "greeter"
 TOML
     success "Wrote $GREETD_CONF"
@@ -487,12 +481,26 @@ TOML
     # and logind handles seats on its own. Enabling it breaks the greeter:
     # /run/seatd.sock is root:seat, greetd's greeter runs as `greeter` which is
     # not in that group, and libseat does not fall back to logind when the socket
-    # exists but is unreadable — it fails with "Permission denied" and cagebreak
-    # dies on EGL.
+    # exists but is unreadable — it fails with "Permission denied" and the
+    # compositor dies on EGL.
+}
+
+# sysc-greet variants conflict with each other, and --noconfirm answers "no" to
+# pacman's "remove the conflicting package?", so the install would just fail.
+# Removing one also disables greetd (its pre_remove); cmd_greetd re-enables it.
+# Matches installed names exactly: every variant provides "sysc-greet", so
+# `pacman -Q sysc-greet` would also hit -cagebreak and then fail to remove it.
+_remove_other_greeter_variants() {
+    local -a others=()
+    mapfile -t others < <(pacman -Qq | grep -xE 'sysc-greet(-(cagebreak|sway|mango))?')
+    [[ ${#others[@]} -gt 0 ]] || return 0
+    info "Removing ${others[*]} — conflicts with sysc-greet-hyprland"
+    sudo pacman -R --noconfirm "${others[@]}"
 }
 
 cmd_greetd() {
     prevent_root
+    _remove_other_greeter_variants
     _install_pkgs deps-greeter-greetd.conf
     _greetd_configure
     _require_rescue
@@ -608,8 +616,7 @@ cmd_check() {
 
     step "Binaries the greeter session runs"
     local b
-    for b in cagebreak kitty socat gslapper /usr/local/bin/sysc-greet \
-             "$GREETD_LAUNCHER" "$GREETD_RESOLVER"; do
+    for b in start-hyprland Hyprland kitty gslapper /usr/local/bin/sysc-greet; do
         if command -v "$b" &>/dev/null || [[ -x "$b" ]]; then
             success "$(basename "$b")"
         else
@@ -617,13 +624,16 @@ cmd_check() {
         fi
     done
 
-    step "Cagebreak config parses"
-    if [[ -f "$CAGEBREAK_CONF" ]]; then
-        if timeout 5 cagebreak -c "$CAGEBREAK_CONF" -s &>/dev/null; then
-            success "$CAGEBREAK_CONF accepted"
-        else
-            error "cagebreak rejects $CAGEBREAK_CONF"; fail=1
-        fi
+    step "Hyprland greeter config parses"
+    if [[ ! -f "$HYPRLAND_GREETER_CONF" ]]; then
+        error "$HYPRLAND_GREETER_CONF missing — run 'setup greeter apply'"; fail=1
+    elif Hyprland --verify-config -c "$HYPRLAND_GREETER_CONF" 2>&1 | grep -qx 'config ok'; then
+        success "$HYPRLAND_GREETER_CONF accepted"
+    else
+        error "Hyprland rejects $HYPRLAND_GREETER_CONF:"
+        Hyprland --verify-config -c "$HYPRLAND_GREETER_CONF" 2>&1 \
+            | sed -n '/Config parsing result/,$p' | tail -n +2 | sed 's/^/      /'
+        fail=1
     fi
 
     step "Seat access"
@@ -643,18 +653,23 @@ cmd_check() {
     fi
 
     step "Outputs"
-    local o connected pinned resolved
-    connected="$(_connected_outputs | tr '\n' ' ')"
-    echo "      connected: $connected"
+    local f connected pinned
+    echo "      connected: $(_connected_outputs | tr '\n' ' ')"
 
-    if [[ -r "$GREETD_OUTPUT_FILE" ]]; then
+    connected="$(_connected_descriptions)"
+    if [[ ! -r "$GREETD_OUTPUT_FILE" ]]; then
+        info "not pinned — the greeter lands on the first enabled output"
+        info "Pin it with: GREETER_OUTPUT=DP-3 setup greeter apply"
+    elif [[ -z "$connected" ]]; then
+        info "not inside Hyprland — cannot tell which pinned monitor is connected"
+    else
         local any=0
         while IFS= read -r pinned; do
             [[ -n "$pinned" ]] || continue
-            if resolved="$("$GREETD_RESOLVER" "$pinned" 2>/dev/null)" && [[ -n "$resolved" ]]; then
+            if grep -qxF "$pinned" <<<"$connected"; then
                 [[ $any -eq 0 ]] \
-                    && success "greeter lands on $resolved — '$pinned'" \
-                    || info "fallback: $resolved — '$pinned'"
+                    && success "greeter lands on '$pinned'" \
+                    || info "fallback: '$pinned'"
                 any=1
             else
                 warn "not connected: '$pinned'"
@@ -662,14 +677,10 @@ cmd_check() {
         done < <(grep -vE '^[[:space:]]*(#|$)' "$GREETD_OUTPUT_FILE")
         [[ $any -eq 1 ]] || \
             warn "nothing in $GREETD_OUTPUT_FILE is connected — the greeter falls back to the first output"
-    else
-        info "not pinned — the greeter lands on the first enabled output"
-        info "Pin it with: GREETER_OUTPUT=DP-3 setup greeter apply"
     fi
 
-    # A leftover static pin would fight the launcher, and is name-based.
-    for o in $(grep -oP '^output \K[A-Za-z0-9-]+' "$CAGEBREAK_CONF" 2>/dev/null); do
-        warn "$CAGEBREAK_CONF still hardcodes 'output $o' — remove it, the launcher pins now"
+    for f in "${_LEGACY_GREETER_FILES[@]}"; do
+        [[ -e "$f" ]] && warn "$f is left over from the Cagebreak variant — 'setup greeter apply' removes it"
     done
 
     step "Keyring"
@@ -697,7 +708,7 @@ _usage() {
 Usage: setup greeter <subcommand>
 
     sddm      Install, configure and enable SDDM + the astronaut theme
-    greetd    Install, configure and enable greetd + sysc-greet (Cagebreak)
+    greetd    Install, configure and enable greetd + sysc-greet (Hyprland)
     apply     Re-apply the config of whichever is active
               (run after changing the monitor layout)
     test      Preview the SDDM theme in a window, changing nothing

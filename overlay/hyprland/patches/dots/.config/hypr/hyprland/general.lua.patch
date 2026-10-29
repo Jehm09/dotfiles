@@ -1,5 +1,5 @@
 diff --git a/dots/.config/hypr/hyprland/general.lua b/dots/.config/hypr/hyprland/general.lua
-index b6764a8b..fab1e5d2 100644
+index b6764a8b..d6de7d57 100644
 --- a/dots/.config/hypr/hyprland/general.lua
 +++ b/dots/.config/hypr/hyprland/general.lua
 @@ -3,7 +3,7 @@ hl.monitor({
@@ -11,3 +11,12 @@ index b6764a8b..fab1e5d2 100644
  })
  
  hl.gesture({
+@@ -95,7 +95,7 @@ hl.config({
+             enabled = true,
+             range = 20,
+             offset = {0, 2},
+-            render_power = 10,
++            render_power = 4, -- Hyprland 0.57+ caps it at 4
+             color = "rgba(00000020)"
+ 
+         },

@@ -88,7 +88,7 @@ _aur_helper="yay"         # yay | paru | both
 # mutually exclusive and the packages, dotfiles and session all follow from it.
 _desktop=""
 
-# Which login screen. SDDM is the default; greetd + sysc-greet (Cagebreak) is
+# Which login screen. SDDM is the default; greetd + sysc-greet (Hyprland) is
 # the lighter alternative. See cmd/lib/greeter.sh.
 _greeter="sddm"
 
@@ -156,7 +156,7 @@ Options:
     --only a,b,c        Run only these steps
     --skip a,b          Run everything except these
     --greeter=sddm      Graphical Qt login with the astronaut theme (default)
-    --greeter=greetd    Console login: greetd + sysc-greet (Cagebreak)
+    --greeter=greetd    Console login: greetd + sysc-greet (Hyprland)
     --aur-helper=yay    Which helper to install and use (default; or paru, both)
     -h, --help          Show this help
 
@@ -224,7 +224,7 @@ skipped. Which do you want?" \
     _greeter="$(menu_radiolist "Login screen" \
 "What you see when you boot. Only one can be enabled at a time." \
         sddm   "SDDM — graphical, themed (astronaut)"      on \
-        greetd "greetd + sysc-greet — console, Cagebreak"  off)" \
+        greetd "greetd + sysc-greet — console, Hyprland"  off)" \
         || { info "Cancelled."; exit 0; }
 
     # Steps are listed in the order they must run. Each assumes the ones above
