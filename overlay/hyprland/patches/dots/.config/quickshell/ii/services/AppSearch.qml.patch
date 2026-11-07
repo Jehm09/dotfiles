@@ -1,8 +1,45 @@
 diff --git a/dots/.config/quickshell/ii/services/AppSearch.qml b/dots/.config/quickshell/ii/services/AppSearch.qml
-index 358b8d20..bd88c42a 100644
+index 358b8d20..894fb9bc 100644
 --- a/dots/.config/quickshell/ii/services/AppSearch.qml
 +++ b/dots/.config/quickshell/ii/services/AppSearch.qml
-@@ -95,13 +95,31 @@ Singleton {
+@@ -10,8 +10,6 @@ import Quickshell
+  */
+ Singleton {
+     id: root
+-    property bool sloppySearch: Config.options?.search.sloppy ?? false
+-    property real scoreThreshold: 0.2
+     property var substitutions: ({
+         "code-url-handler": "visual-studio-code",
+         "Code": "visual-studio-code",
+@@ -58,23 +56,12 @@ Singleton {
+         entry: a
+     }))
+ 
+-    function fuzzyQuery(search: string): var { // Idk why list<DesktopEntry> doesn't work
+-        if (root.sloppySearch) {
+-            const results = list.map(obj => ({
+-                entry: obj,
+-                score: Levendist.computeScore(obj.name.toLowerCase(), search.toLowerCase())
+-            })).filter(item => item.score > root.scoreThreshold)
+-                .sort((a, b) => b.score - a.score)
+-            return results
+-                .map(item => item.entry)
+-        }
+-
+-        return Fuzzy.go(search, preppedNames, {
++    // algorithmOverride: para forzar un algoritmo sin importar search.algorithm
++    function fuzzyQuery(search, algorithmOverride): var { // Idk why list<DesktopEntry> doesn't work
++        return SearchAlgorithm.search(search, () => Fuzzy.go(search, preppedNames, {
+             all: true,
+             key: "name"
+-        }).map(r => {
+-            return r.obj.entry
+-        });
++        }).map(r => r.obj.entry), list, (entry, query) => Levendist.computeScore(entry.name.toLowerCase(), query), algorithmOverride);
+     }
+ 
+     function iconExists(iconName) {
+@@ -95,13 +82,31 @@ Singleton {
          return str.toLowerCase().replace(/_/g, "-");
      }
  
@@ -34,3 +71,13 @@ index 358b8d20..bd88c42a 100644
          // Normal substitutions
          if (substitutions[str]) return substitutions[str];
          if (substitutions[str.toLowerCase()]) return substitutions[str.toLowerCase()];
+@@ -148,7 +153,8 @@ Singleton {
+             if (iconExists(guess)) return guess;
+         }
+ 
+-        const nameSearchResults = root.fuzzyQuery(str);
++        // Solo fuzzy: con Levenshtein "code" daba el ícono de "Colors"
++        const nameSearchResults = root.fuzzyQuery(str, "fuzzy");
+         if (nameSearchResults.length > 0) {
+             const guess = nameSearchResults[0].icon
+             if (iconExists(guess)) return guess;

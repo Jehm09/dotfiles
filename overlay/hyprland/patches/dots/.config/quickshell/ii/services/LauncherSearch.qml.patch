@@ -1,5 +1,5 @@
 diff --git a/dots/.config/quickshell/ii/services/LauncherSearch.qml b/dots/.config/quickshell/ii/services/LauncherSearch.qml
-index 25701fb6..3321d778 100644
+index 25701fb6..30aa366d 100644
 --- a/dots/.config/quickshell/ii/services/LauncherSearch.qml
 +++ b/dots/.config/quickshell/ii/services/LauncherSearch.qml
 @@ -33,7 +33,7 @@ Singleton {
@@ -63,3 +63,43 @@ index 25701fb6..3321d778 100644
                      blurImage: shouldBlurImage
                  });
              }).filter(Boolean);
+@@ -228,17 +227,6 @@ Singleton {
+ 
+         ////////////////// Init ///////////////////
+         nonAppResultsTimer.restart();
+-        const mathResultObject = resultComp.createObject(null, {
+-            name: root.mathResult,
+-            verb: Translation.tr("Copy"),
+-            type: Translation.tr("Math result"),
+-            fontType: LauncherSearchResult.FontType.Monospace,
+-            iconName: 'calculate',
+-            iconType: LauncherSearchResult.IconType.Material,
+-            execute: () => {
+-                Quickshell.clipboardText = root.mathResult;
+-            }
+-        });
+         const appResultObjects = AppSearch.fuzzyQuery(StringUtils.cleanPrefix(root.query, Config.options.search.prefix.app)).map(entry => {
+             return resultComp.createObject(null, {
+                 type: Translation.tr("App"),
+@@ -356,6 +344,21 @@ Singleton {
+         return result;
+     }
+ 
++    // Fila fija para la calculadora: cuando llega la respuesta de qalc solo cambia su texto.
++    // Si se creara dentro de `results`, cada respuesta recalculaba toda la búsqueda (2 veces por tecla).
++    LauncherSearchResult {
++        id: mathResultObject
++        name: root.mathResult
++        verb: Translation.tr("Copy")
++        type: Translation.tr("Math result")
++        fontType: LauncherSearchResult.FontType.Monospace
++        iconName: 'calculate'
++        iconType: LauncherSearchResult.IconType.Material
++        execute: () => {
++            Quickshell.clipboardText = root.mathResult;
++        }
++    }
++
+     Component {
+         id: resultComp
+         LauncherSearchResult {}

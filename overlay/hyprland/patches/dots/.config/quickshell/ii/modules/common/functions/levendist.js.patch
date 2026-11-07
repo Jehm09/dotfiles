@@ -1,0 +1,24 @@
+diff --git a/dots/.config/quickshell/ii/modules/common/functions/levendist.js b/dots/.config/quickshell/ii/modules/common/functions/levendist.js
+index 90180d21..e9c492e3 100644
+--- a/dots/.config/quickshell/ii/modules/common/functions/levendist.js
++++ b/dots/.config/quickshell/ii/modules/common/functions/levendist.js
+@@ -26,8 +26,8 @@ function levenshteinDistance(s1, s2) {
+     if (len2 === 0) return len1;
+ 
+     if (len2 > len1) {
+-        [s1, s2] = [s2, s1];
+-        [len1, len2] = [len2, len1];
++        const swapS = s1; s1 = s2; s2 = swapS;
++        const swapLen = len1; len1 = len2; len2 = swapLen;
+     }
+ 
+     let prev = new Array(len2 + 1);
+@@ -43,7 +43,7 @@ function levenshteinDistance(s1, s2) {
+             let cost = s1[i - 1] === s2[j - 1] ? 0 : 1;
+             curr[j] = min3(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+         }
+-        [prev, curr] = [curr, prev];
++        const swapRow = prev; prev = curr; curr = swapRow;
+     }
+ 
+     return prev[len2];

@@ -1,5 +1,5 @@
 diff --git a/dots/.config/quickshell/ii/modules/common/Config.qml b/dots/.config/quickshell/ii/modules/common/Config.qml
-index 5fcd1bbd..5a220537 100644
+index 5fcd1bbd..723221bf 100644
 --- a/dots/.config/quickshell/ii/modules/common/Config.qml
 +++ b/dots/.config/quickshell/ii/modules/common/Config.qml
 @@ -78,34 +78,11 @@ Singleton {
@@ -146,6 +146,15 @@ index 5fcd1bbd..5a220537 100644
              }
  
              property JsonObject tray: JsonObject {
+@@ -478,7 +484,7 @@ Singleton {
+                 property int nonAppResultDelay: 30 // This prevents lagging when typing
+                 property string engineBaseUrl: "https://www.google.com/search?q="
+                 property list<string> excludedSites: ["quora.com", "facebook.com"]
+-                property bool sloppy: false // Uses levenshtein distance based scoring instead of fuzzy sort. Very weird.
++                property string algorithm: "fuzzy" // "fuzzy" (siglas como "vsc"), "levenshtein" (typos) o "hybrid" (ambos)
+                 property JsonObject prefix: JsonObject {
+                     property bool showDefaultActionsWithoutPrefix: true
+                     property string action: "/"
 @@ -497,21 +503,6 @@ Singleton {
  
              property JsonObject sidebar: JsonObject {

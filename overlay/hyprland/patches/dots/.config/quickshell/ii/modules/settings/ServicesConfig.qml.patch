@@ -1,5 +1,5 @@
 diff --git a/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml b/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml
-index aec8dc98..a8af961b 100644
+index aec8dc98..0464dcc3 100644
 --- a/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml
 +++ b/dots/.config/quickshell/ii/modules/settings/ServicesConfig.qml
 @@ -1,5 +1,6 @@
@@ -130,3 +130,44 @@ index aec8dc98..a8af961b 100644
      ContentSection {
          icon: "file_open"
          title: Translation.tr("Save paths")
+@@ -114,14 +167,32 @@ ContentPage {
+         icon: "search"
+         title: Translation.tr("Search")
+ 
+-        ConfigSwitch {
+-            text: Translation.tr("Use Levenshtein distance-based algorithm instead of fuzzy")
+-            checked: Config.options.search.sloppy
+-            onCheckedChanged: {
+-                Config.options.search.sloppy = checked;
+-            }
+-            StyledToolTip {
+-                text: Translation.tr("Could be better if you make a ton of typos,\nbut results can be weird and might not work with acronyms\n(e.g. \"GIMP\" might not give you the paint program)")
++        ContentSubsection {
++            title: Translation.tr("Matching algorithm")
++            tooltip: Translation.tr("Fuzzy: fast, understands acronyms (\"vsc\" finds Visual Studio Code)\nLevenshtein: tolerates typos (\"discrod\" finds Discord), slower and odd with acronyms\nCombined: fuzzy first, adds typo matches when fuzzy finds little")
++
++            ConfigSelectionArray {
++                currentValue: Config.options.search.algorithm
++                onSelected: newValue => {
++                    Config.options.search.algorithm = newValue;
++                }
++                options: [
++                    {
++                        displayName: Translation.tr("Fuzzy"),
++                        icon: "abc",
++                        value: "fuzzy"
++                    },
++                    {
++                        displayName: Translation.tr("Levenshtein"),
++                        icon: "spellcheck",
++                        value: "levenshtein"
++                    },
++                    {
++                        displayName: Translation.tr("Combined"),
++                        icon: "merge",
++                        value: "hybrid"
++                    }
++                ]
+             }
+         }
+ 

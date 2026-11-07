@@ -1,8 +1,42 @@
 diff --git a/dots/.config/quickshell/ii/services/Cliphist.qml b/dots/.config/quickshell/ii/services/Cliphist.qml
-index 615e949f..fe7785b9 100644
+index 615e949f..93fabb0f 100644
 --- a/dots/.config/quickshell/ii/services/Cliphist.qml
 +++ b/dots/.config/quickshell/ii/services/Cliphist.qml
-@@ -61,11 +61,23 @@ Singleton {
+@@ -13,8 +13,6 @@ Singleton {
+     property string cliphistBinary: "cliphist"
+     property real pasteDelay: 0.05
+     property string pressPasteCommand: "ydotool key -d 1 29:1 47:1 47:0 29:0"
+-    property bool sloppySearch: Config.options?.search.sloppy ?? false
+-    property real scoreThreshold: 0.2
+     property list<string> entries: []
+     readonly property var preparedEntries: entries.map(a => ({
+         name: Fuzzy.prepare(`${a.replace(/^\s*\S+\s+/, "")}`),
+@@ -24,22 +22,10 @@ Singleton {
+         if (search.trim() === "") {
+             return entries;
+         }
+-        if (root.sloppySearch) {
+-            const results = entries.slice(0, 100).map(str => ({
+-                entry: str,
+-                score: Levendist.computeTextMatchScore(str.toLowerCase(), search.toLowerCase())
+-            })).filter(item => item.score > root.scoreThreshold)
+-                .sort((a, b) => b.score - a.score)
+-            return results
+-                .map(item => item.entry)
+-        }
+-
+-        return Fuzzy.go(search, preparedEntries, {
++        return SearchAlgorithm.search(search, () => Fuzzy.go(search, preparedEntries, {
+             all: true,
+             key: "name"
+-        }).map(r => {
+-            return r.obj.entry
+-        });
++        }).map(r => r.obj.entry), entries.slice(0, 100), (entry, query) => Levendist.computeTextMatchScore(entry.toLowerCase(), query));
+     }
+ 
+     function entryIsImage(entry) {
+@@ -61,11 +47,23 @@ Singleton {
      }
  
      function paste(entry) {
@@ -30,7 +64,7 @@ index 615e949f..fe7785b9 100644
          }
      }
  
-@@ -110,6 +122,12 @@ Singleton {
+@@ -110,6 +108,12 @@ Singleton {
          wipeProc.running = true;
      }
  
