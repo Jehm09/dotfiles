@@ -103,8 +103,8 @@
         "showOnlyWhenLocked": false,
         "style": "cookie",
         "styleLocked": "cookie",
-        "x": 2303.09765625,
-        "y": 78.0703125
+        "x": 2314.00390625,
+        "y": 78.0390625
       },
       "weather": {
         "enable": false,
@@ -168,7 +168,7 @@
       "city": "Palmira valle del cauca",
       "enable": true,
       "enableGPS": false,
-      "fetchInterval": 50,
+      "fetchInterval": 15,
       "useUSCS": false
     },
     "workspaces": {
