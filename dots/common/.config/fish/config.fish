@@ -13,6 +13,10 @@ if not contains $_asdf_shims $PATH
 end
 set --erase _asdf_shims
 
+# npmrc fuera de ~/.npmrc: nvm (lo usan algunos PKGBUILD del AUR) aborta si ~/.npmrc
+# tiene `prefix`, y el nuestro manda los `npm i -g` a ~/.local.
+set -gx NPM_CONFIG_USERCONFIG "$HOME/.config/npm/npmrc"
+
 # Prompt, starship, aliases, etc.
 
 function fish_prompt -d "Write out the prompt"
@@ -56,6 +60,8 @@ if status is-interactive
     alias claer "printf '\033[2J\033[3J\033[1;1H'"
     alias pamcan pacman
     alias q 'qs -c ii'
+    # El paquete de Arch instala Zed como `zeditor` (`zed` choca con otro binario)
+    alias zed zeditor
     if test "$TERM" != "linux"
         alias ls 'eza --icons'
     end
