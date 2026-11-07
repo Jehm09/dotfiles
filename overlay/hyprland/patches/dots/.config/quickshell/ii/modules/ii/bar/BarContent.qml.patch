@@ -1,5 +1,5 @@
 diff --git a/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml b/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml
-index 3bec7589..8fc855ca 100644
+index 3bec7589..78d16e81 100644
 --- a/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/bar/BarContent.qml
 @@ -62,10 +62,6 @@ Item { // Bar content region
@@ -21,7 +21,19 @@ index 3bec7589..8fc855ca 100644
              }
  
              ActiveWindow {
-@@ -324,6 +319,11 @@ Item { // Bar content region
+@@ -317,6 +312,11 @@ Item { // Bar content region
+                 }
+             }
+ 
++            UpdatesIndicator {
++                Layout.alignment: Qt.AlignVCenter
++                Layout.leftMargin: 4
++            }
++
+             SysTray {
+                 visible: root.useShortenedForm === 0
+                 Layout.fillWidth: false
+@@ -324,6 +324,11 @@ Item { // Bar content region
                  invertSide: Config?.options.bar.bottom
              }
  

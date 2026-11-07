@@ -1,8 +1,75 @@
 diff --git a/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionScreen.qml b/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionScreen.qml
-index 78b93c4d..c542b495 100644
+index 78b93c4d..3f73f1f9 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionScreen.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionScreen.qml
-@@ -45,7 +45,7 @@ Scope {
+@@ -19,8 +19,10 @@ Scope {
+         id: sessionLoader
+         active: GlobalStates.sessionOpen
+         onActiveChanged: {
+-            if (sessionLoader.active)
++            if (sessionLoader.active) {
+                 SessionWarnings.refresh();
++                SystemUpdates.refresh();
++            }
+         }
+ 
+         Connections {
+@@ -36,16 +38,62 @@ Scope {
+             id: sessionRoot
+             visible: sessionLoader.active
+             property string subtitle
++            // "poweroff"/"reboot" mientras se pregunta si actualizar antes; "" = menú normal.
++            property string pendingPower: ""
++            readonly property bool pendingReboot: pendingPower === "reboot"
++            // Eligió "Update, then …": se pide la contraseña de sudo antes de abrir la terminal.
++            property bool askingPassword: false
++
++            Connections {
++                target: SystemUpdates
++                function onLaunched() {
++                    if (sessionRoot.askingPassword) sessionRoot.hide();
++                }
++            }
+ 
+             function hide() {
+                 GlobalStates.sessionOpen = false;
+             }
+ 
++            function powerNow(action) {
++                if (action === "reboot") Session.reboot();
++                else Session.poweroff();
++                sessionRoot.hide();
++            }
++
++            // Con paquetes pendientes pregunta primero; usa el conteo en caché si el chequeo sigue corriendo.
++            function requestPower(action) {
++                if (SystemUpdates.count > 0 && SystemUpdates.setupPath !== "" && !SystemUpdates.running
++                        && !SessionWarnings.packageManagerRunning) {
++                    sessionRoot.pendingPower = action;
++                    updateFirstButton.forceActiveFocus();
++                } else {
++                    sessionRoot.powerNow(action);
++                }
++            }
++
++            function askPassword() {
++                SystemUpdates.resetAuth();
++                sessionRoot.askingPassword = true;
++                passwordPrompt.focusField();
++            }
++
++            function cancelPassword() {
++                sessionRoot.askingPassword = false;
++                updateFirstButton.forceActiveFocus();
++            }
++
++            function cancelPending() {
++                const wasReboot = sessionRoot.pendingReboot;
++                sessionRoot.pendingPower = "";
++                (wasReboot ? sessionReboot : sessionShutdown).forceActiveFocus();
++            }
++
+             exclusionMode: ExclusionMode.Ignore
              WlrLayershell.namespace: "quickshell:session"
              WlrLayershell.layer: WlrLayer.Overlay
              WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive
@@ -11,7 +78,101 @@ index 78b93c4d..c542b495 100644
  
              anchors {
                  top: true
-@@ -118,7 +118,7 @@ Scope {
+@@ -71,7 +119,8 @@ Scope {
+ 
+                 Keys.onPressed: event => {
+                     if (event.key === Qt.Key_Escape) {
+-                        sessionRoot.hide();
++                        if (sessionRoot.pendingPower) sessionRoot.cancelPending();
++                        else sessionRoot.hide();
+                     }
+                 }
+ 
+@@ -87,7 +136,11 @@ Scope {
+                             pixelSize: Appearance.font.pixelSize.title
+                             variableAxes: Appearance.font.variableAxes.title
+                         }
+-                        text: Translation.tr("Session")
++                        text: sessionRoot.askingPassword
++                            ? Translation.tr("Password to update")
++                            : sessionRoot.pendingPower
++                            ? (sessionRoot.pendingReboot ? Translation.tr("Update before rebooting?") : Translation.tr("Update before shutting down?"))
++                            : Translation.tr("Session")
+                     }
+ 
+                     StyledText {
+@@ -95,11 +148,69 @@ Scope {
+                         Layout.alignment: Qt.AlignHCenter
+                         horizontalAlignment: Text.AlignHCenter
+                         font.pixelSize: Appearance.font.pixelSize.normal
+-                        text: Translation.tr("Arrow keys to navigate, Enter to select\nEsc or click anywhere to cancel")
++                        text: sessionRoot.pendingPower
++                            ? Translation.tr("%1 update(s) waiting: %2 from the repos, %3 from the AUR\nIf the update fails nothing is turned off — Esc to go back")
++                                .arg(SystemUpdates.count).arg(SystemUpdates.repoPackages.length).arg(SystemUpdates.aurPackages.length)
++                            : Translation.tr("Arrow keys to navigate, Enter to select\nEsc or click anywhere to cancel")
++                    }
++                }
++
++                SudoPasswordPrompt {
++                    id: passwordPrompt
++                    visible: sessionRoot.askingPassword
++                    Layout.alignment: Qt.AlignHCenter
++                    confirmText: sessionRoot.pendingReboot ? Translation.tr("Update and reboot") : Translation.tr("Update and shut down")
++                    busy: SystemUpdates.authState === "checking"
++                    errorText: SystemUpdates.authState === "wrong" ? Translation.tr("Wrong password")
++                        : SystemUpdates.authState === "failed" ? Translation.tr("Could not check the password")
++                        : ""
++                    onSubmitted: password => SystemUpdates.startUpdate(sessionRoot.pendingPower, password)
++                    onCancelled: sessionRoot.cancelPassword()
++                }
++
++                RowLayout {
++                    visible: sessionRoot.pendingPower !== "" && !sessionRoot.askingPassword
++                    Layout.alignment: Qt.AlignHCenter
++                    spacing: 15
++
++                    SessionActionButton {
++                        id: updateFirstButton
++                        buttonIcon: "system_update_alt"
++                        buttonText: sessionRoot.pendingReboot ? Translation.tr("Update, then reboot") : Translation.tr("Update, then shut down")
++                        onClicked: sessionRoot.askPassword()
++                        onFocusChanged: {
++                            if (focus)
++                                sessionRoot.subtitle = buttonText;
++                        }
++                        KeyNavigation.right: skipUpdateButton
++                    }
++                    SessionActionButton {
++                        id: skipUpdateButton
++                        buttonIcon: sessionRoot.pendingReboot ? "restart_alt" : "power_settings_new"
++                        buttonText: sessionRoot.pendingReboot ? Translation.tr("Reboot without updating") : Translation.tr("Shut down without updating")
++                        onClicked: sessionRoot.powerNow(sessionRoot.pendingPower)
++                        onFocusChanged: {
++                            if (focus)
++                                sessionRoot.subtitle = buttonText;
++                        }
++                        KeyNavigation.left: updateFirstButton
++                        KeyNavigation.right: cancelPendingButton
++                    }
++                    SessionActionButton {
++                        id: cancelPendingButton
++                        buttonIcon: "arrow_back"
++                        buttonText: Translation.tr("Back")
++                        onClicked: sessionRoot.cancelPending()
++                        onFocusChanged: {
++                            if (focus)
++                                sessionRoot.subtitle = buttonText;
++                        }
++                        KeyNavigation.left: skipUpdateButton
+                     }
+                 }
+ 
+                 GridLayout {
++                    visible: sessionRoot.pendingPower === ""
+                     columns: 4
+                     columnSpacing: 15
+                     rowSpacing: 15
+@@ -118,7 +229,7 @@ Scope {
                                  sessionRoot.subtitle = buttonText;
                          }
                          KeyNavigation.right: sessionSleep
@@ -20,7 +181,7 @@ index 78b93c4d..c542b495 100644
                      }
                      SessionActionButton {
                          id: sessionSleep
-@@ -134,7 +134,7 @@ Scope {
+@@ -134,7 +245,7 @@ Scope {
                          }
                          KeyNavigation.left: sessionLock
                          KeyNavigation.right: sessionLogout
@@ -29,7 +190,7 @@ index 78b93c4d..c542b495 100644
                      }
                      SessionActionButton {
                          id: sessionLogout
-@@ -150,7 +150,7 @@ Scope {
+@@ -150,7 +261,7 @@ Scope {
                          }
                          KeyNavigation.left: sessionSleep
                          KeyNavigation.right: sessionTaskManager
@@ -38,7 +199,7 @@ index 78b93c4d..c542b495 100644
                      }
                      SessionActionButton {
                          id: sessionTaskManager
-@@ -168,21 +168,6 @@ Scope {
+@@ -168,52 +279,30 @@ Scope {
                          KeyNavigation.down: sessionFirmwareReboot
                      }
  
@@ -60,7 +221,13 @@ index 78b93c4d..c542b495 100644
                      SessionActionButton {
                          id: sessionShutdown
                          buttonIcon: "power_settings_new"
-@@ -195,9 +180,8 @@ Scope {
+                         buttonText: Translation.tr("Shutdown")
+-                        onClicked: {
+-                            Session.poweroff();
+-                            sessionRoot.hide();
+-                        }
++                        onClicked: sessionRoot.requestPower("poweroff")
+                         onFocusChanged: {
                              if (focus)
                                  sessionRoot.subtitle = buttonText;
                          }
@@ -71,7 +238,16 @@ index 78b93c4d..c542b495 100644
                      }
                      SessionActionButton {
                          id: sessionReboot
-@@ -213,7 +197,7 @@ Scope {
+                         buttonIcon: "restart_alt"
+                         buttonText: Translation.tr("Reboot")
+-                        onClicked: {
+-                            Session.reboot();
+-                            sessionRoot.hide();
+-                        }
++                        onClicked: sessionRoot.requestPower("reboot")
+                         onFocusChanged: {
+                             if (focus)
+                                 sessionRoot.subtitle = buttonText;
                          }
                          KeyNavigation.left: sessionShutdown
                          KeyNavigation.right: sessionFirmwareReboot
@@ -80,7 +256,7 @@ index 78b93c4d..c542b495 100644
                      }
                      SessionActionButton {
                          id: sessionFirmwareReboot
-@@ -227,8 +211,8 @@ Scope {
+@@ -227,8 +316,8 @@ Scope {
                              if (focus)
                                  sessionRoot.subtitle = buttonText;
                          }
@@ -90,3 +266,33 @@ index 78b93c4d..c542b495 100644
                      }
                  }
  
+@@ -246,6 +335,29 @@ Scope {
+                 }
+                 spacing: 10
+ 
++                Loader {
++                    Layout.alignment: Qt.AlignHCenter
++                    active: sessionRoot.pendingPower === "" && (SystemUpdates.count > 0 || SystemUpdates.rebootNeeded)
++                    visible: active
++                    sourceComponent: DescriptionLabel {
++                        text: [
++                            SystemUpdates.count > 0 ? Translation.tr("%1 package update(s) available").arg(SystemUpdates.count) : "",
++                            SystemUpdates.rebootNeeded ? Translation.tr("Reboot to finish the last update") : ""
++                        ].filter(line => line).join(" · ")
++                    }
++                }
++
++                Loader {
++                    Layout.alignment: Qt.AlignHCenter
++                    active: sessionRoot.pendingPower !== "" && SystemUpdates.news.length > 0
++                    visible: active
++                    sourceComponent: DescriptionLabel {
++                        text: Translation.tr("There is Arch news newer than your packages — check Settings → Update if it asks for manual steps")
++                        textColor: Appearance.m3colors.m3onErrorContainer
++                        color: Appearance.m3colors.m3errorContainer
++                    }
++                }
++
+                 Loader {
+                     Layout.alignment: Qt.AlignHCenter
+                     active: SessionWarnings.downloadRunning

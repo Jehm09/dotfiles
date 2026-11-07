@@ -1,0 +1,285 @@
+diff --git a/dots/.config/quickshell/ii/services/Weather.qml b/dots/.config/quickshell/ii/services/Weather.qml
+index c42c7cb8..2c1f911c 100644
+--- a/dots/.config/quickshell/ii/services/Weather.qml
++++ b/dots/.config/quickshell/ii/services/Weather.qml
+@@ -2,26 +2,25 @@ pragma Singleton
+ pragma ComponentBehavior: Bound
+ 
+ import Quickshell
+-import Quickshell.Io
+ import QtQuick
+ import QtPositioning
+ 
+ import qs.modules.common
+ 
++// Clima desde Open-Meteo (sin API key). wttr.in daba temperaturas ~5 °C más bajas en zonas de montaña.
+ Singleton {
+     id: root
+-    // 10 minute
+     readonly property int fetchInterval: Config.options.bar.weather.fetchInterval * 60 * 1000
+     readonly property string city: Config.options.bar.weather.city
+     readonly property bool useUSCS: Config.options.bar.weather.useUSCS
+     property bool gpsActive: Config.options.bar.weather.enableGPS
+ 
+-    onUseUSCSChanged: {
+-        root.getData();
+-    }
+-    onCityChanged: {
+-        root.getData();
+-    }
++    readonly property string geocodingUrl: "https://geocoding-api.open-meteo.com/v1/search"
++    readonly property string forecastUrl: "https://api.open-meteo.com/v1/forecast"
++    readonly property string language: Qt.locale().name.split("_")[0] || "en"
++
++    onUseUSCSChanged: root.getData()
++    onCityChanged: root.getData()
+ 
+     property var location: ({
+         valid: false,
+@@ -29,6 +28,14 @@ Singleton {
+         lon: 0
+     })
+ 
++    // Resultado del geocoding cacheado por texto de ciudad, para no repetirlo en cada refresco
++    property var resolvedPlace: ({
++        query: "",
++        name: "",
++        lat: 0,
++        lon: 0
++    })
++
+     property var data: ({
+         uv: 0,
+         humidity: 0,
+@@ -36,6 +43,7 @@ Singleton {
+         sunset: 0,
+         windDir: 0,
+         wCode: 0,
++        isDay: true,
+         city: 0,
+         wind: 0,
+         precip: 0,
+@@ -46,60 +54,139 @@ Singleton {
+         lastRefresh: 0,
+     })
+ 
+-    function refineData(data) {
++    function getJson(url, onSuccess) {
++        const request = new XMLHttpRequest();
++        request.onreadystatechange = () => {
++            if (request.readyState !== XMLHttpRequest.DONE)
++                return;
++            if (request.status !== 200) {
++                console.error(`[WeatherService] HTTP ${request.status} for ${url}`);
++                return;
++            }
++            try {
++                onSuccess(JSON.parse(request.responseText));
++            } catch (e) {
++                console.error(`[WeatherService] ${e.message}`);
++            }
++        };
++        request.open("GET", url);
++        request.send();
++    }
++
++    function normalizeText(text) {
++        const lower = String(text ?? "").toLowerCase();
++        return typeof lower.normalize === "function" ? lower.normalize("NFD").replace(/[̀-ͯ]/g, "") : lower;
++    }
++
++    // El geocoding solo entiende nombres de lugar ("Palmira", no "Palmira valle del cauca"):
++    // se prueba con cada vez menos palabras y las sobrantes desempatan contra región/país.
++    function resolveCity(cityText, onResolved) {
++        const words = cityText.replace(/,/g, " ").trim().split(/\s+/).filter(word => word.length > 0);
++        const tryWithWordCount = wordCount => {
++            if (wordCount === 0) {
++                console.error(`[WeatherService] Could not find the city "${cityText}".`);
++                return;
++            }
++            const name = words.slice(0, wordCount).join(" ");
++            const hints = words.slice(wordCount).map(normalizeText);
++            getJson(`${root.geocodingUrl}?name=${encodeURIComponent(name)}&count=10&language=${root.language}`, response => {
++                const results = response?.results ?? [];
++                if (results.length === 0) {
++                    tryWithWordCount(wordCount - 1);
++                    return;
++                }
++                const score = place => {
++                    const placeText = normalizeText([place.admin1, place.admin2, place.admin3, place.country].join(" "));
++                    return hints.filter(hint => placeText.includes(hint)).length;
++                };
++                // Ante empate gana el primero: la API ordena por población
++                let best = results[0];
++                for (const place of results) {
++                    if (score(place) > score(best))
++                        best = place;
++                }
++                onResolved({
++                    query: cityText,
++                    name: best.name,
++                    lat: best.latitude,
++                    lon: best.longitude
++                });
++            });
++        };
++        tryWithWordCount(words.length);
++    }
++
++    function windDirection16(degrees) {
++        const points = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
++        return points[Math.round((degrees ?? 0) / 22.5) % 16];
++    }
++
++    // "2026-11-06T05:49" ya viene en hora local del lugar (timezone=auto)
++    function formatLocalTime(isoText) {
++        const match = /T(\d{2}):(\d{2})/.exec(isoText ?? "");
++        if (!match)
++            return "--:--";
++        const time = new Date(2000, 0, 1, Number(match[1]), Number(match[2]));
++        return Qt.locale().toString(time, Config.options?.time.format ?? "hh:mm");
++    }
++
++    function refineData(response, placeName) {
++        const current = response?.current ?? {};
++        const daily = response?.daily ?? {};
++        const round1 = value => Math.round((value ?? 0) * 10) / 10;
+         let temp = {};
+-        temp.uv = data?.current?.uvIndex || 0;
+-        temp.humidity = (data?.current?.humidity || 0) + "%";
+-        temp.sunrise = data?.astronomy?.sunrise || "0.0";
+-        temp.sunset = data?.astronomy?.sunset || "0.0";
+-        temp.windDir = data?.current?.winddir16Point || "N";
+-        temp.wCode = data?.current?.weatherCode || "113";
+-        temp.city = data?.location?.areaName[0]?.value || "City";
+-        temp.temp = "";
+-        temp.tempFeelsLike = "";
++        temp.uv = Math.round(current.uv_index ?? 0);
++        temp.humidity = (current.relative_humidity_2m ?? 0) + "%";
++        temp.sunrise = formatLocalTime(daily.sunrise?.[0]);
++        temp.sunset = formatLocalTime(daily.sunset?.[0]);
++        temp.windDir = windDirection16(current.wind_direction_10m);
++        temp.wCode = current.weather_code ?? 0;
++        temp.isDay = current.is_day !== 0;
++        temp.city = placeName;
++        // La API se pide siempre en métrico y se convierte acá
+         if (root.useUSCS) {
+-            temp.wind = (data?.current?.windspeedMiles || 0) + " mph";
+-            temp.precip = (data?.current?.precipInches || 0) + " in";
+-            temp.visib = (data?.current?.visibilityMiles || 0) + " m";
+-            temp.press = (data?.current?.pressureInches || 0) + " psi";
+-            temp.temp += (data?.current?.temp_F || 0);
+-            temp.tempFeelsLike += (data?.current?.FeelsLikeF || 0);
+-            temp.temp += "°F";
+-            temp.tempFeelsLike += "°F";
++            temp.wind = round1((current.wind_speed_10m ?? 0) / 1.609344) + " mph";
++            temp.precip = round1((current.precipitation ?? 0) / 25.4) + " in";
++            temp.visib = round1((current.visibility ?? 0) / 1609.344) + " mi";
++            temp.press = round1((current.pressure_msl ?? 0) * 0.02953) + " inHg";
++            temp.temp = Math.round((current.temperature_2m ?? 0) * 9 / 5 + 32) + "°F";
++            temp.tempFeelsLike = Math.round((current.apparent_temperature ?? 0) * 9 / 5 + 32) + "°F";
+         } else {
+-            temp.wind = (data?.current?.windspeedKmph || 0) + " km/h";
+-            temp.precip = (data?.current?.precipMM || 0) + " mm";
+-            temp.visib = (data?.current?.visibility || 0) + " km";
+-            temp.press = (data?.current?.pressure || 0) + " hPa";
+-            temp.temp += (data?.current?.temp_C || 0);
+-            temp.tempFeelsLike += (data?.current?.FeelsLikeC || 0);
+-            temp.temp += "°C";
+-            temp.tempFeelsLike += "°C";
++            temp.wind = round1(current.wind_speed_10m) + " km/h";
++            temp.precip = round1(current.precipitation) + " mm";
++            temp.visib = round1((current.visibility ?? 0) / 1000) + " km";
++            temp.press = Math.round(current.pressure_msl ?? 0) + " hPa";
++            temp.temp = Math.round(current.temperature_2m ?? 0) + "°C";
++            temp.tempFeelsLike = Math.round(current.apparent_temperature ?? 0) + "°C";
+         }
+         temp.lastRefresh = DateTime.time + " • " + DateTime.date;
+         root.data = temp;
+     }
+ 
+-    function getData() {
+-        let command = "curl -s wttr.in";
++    function fetchForecast(lat, lon, placeName) {
++        const fields = "temperature_2m,apparent_temperature,relative_humidity_2m,is_day,precipitation,weather_code,pressure_msl,wind_speed_10m,wind_direction_10m,uv_index,visibility";
++        const url = `${root.forecastUrl}?latitude=${lat}&longitude=${lon}&current=${fields}&daily=sunrise,sunset&timezone=auto&forecast_days=1`;
++        getJson(url, response => root.refineData(response, placeName));
++    }
+ 
++    function getData() {
+         if (root.gpsActive && root.location.valid) {
+-            command += `/${root.location.lat},${root.location.long}`;
+-        } else {
+-            command += `/${formatCityName(root.city)}`;
++            fetchForecast(root.location.lat, root.location.lon, root.city.trim() || Translation.tr("Current location"));
++            return;
+         }
+-
+-        // format as json
+-        command += "?format=j1";
+-        command += " | ";
+-        // only take the current weather, location, asytronmy data
+-        command += "jq '{current: .current_condition[0], location: .nearest_area[0], astronomy: .weather[0].astronomy[0]}'";
+-        fetcher.command[2] = command;
+-        fetcher.running = true;
+-    }
+-
+-    function formatCityName(cityName) {
+-        return cityName.trim().split(/\s+/).join('+');
++        const cityText = root.city.trim();
++        if (cityText.length === 0) {
++            console.error("[WeatherService] No city configured and GPS is not available.");
++            return;
++        }
++        if (root.resolvedPlace.query === cityText) {
++            fetchForecast(root.resolvedPlace.lat, root.resolvedPlace.lon, root.resolvedPlace.name);
++            return;
++        }
++        resolveCity(cityText, place => {
++            root.resolvedPlace = place;
++            fetchForecast(place.lat, place.lon, place.name);
++        });
+     }
+ 
+     Component.onCompleted: {
+@@ -108,38 +195,17 @@ Singleton {
+         positionSource.start();
+     }
+ 
+-    Process {
+-        id: fetcher
+-        command: ["bash", "-c", ""]
+-        stdout: StdioCollector {
+-            onStreamFinished: {
+-                if (text.length === 0)
+-                    return;
+-                try {
+-                    const parsedData = JSON.parse(text);
+-                    root.refineData(parsedData);
+-                    // console.info(`[ data: ${JSON.stringify(parsedData)}`);
+-                } catch (e) {
+-                    console.error(`[WeatherService] ${e.message}`);
+-                }
+-            }
+-        }
+-    }
+-
+     PositionSource {
+         id: positionSource
+         updateInterval: root.fetchInterval
+ 
+         onPositionChanged: {
+-            // update the location if the given location is valid
+-            // if it fails getting the location, use the last valid location
++            // si falla la lectura se conserva la última ubicación válida
+             if (position.latitudeValid && position.longitudeValid) {
+                 root.location.lat = position.coordinate.latitude;
+-                root.location.long = position.coordinate.longitude;
++                root.location.lon = position.coordinate.longitude;
+                 root.location.valid = true;
+-                // console.info(`📍 Location: ${position.coordinate.latitude}, ${position.coordinate.longitude}`);
+                 root.getData();
+-                // if can't get initialized with valid location deactivate the GPS
+             } else {
+                 root.gpsActive = root.location.valid ? true : false;
+                 console.error("[WeatherService] Failed to get the GPS location.");

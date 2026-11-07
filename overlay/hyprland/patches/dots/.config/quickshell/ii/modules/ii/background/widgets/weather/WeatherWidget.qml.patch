@@ -1,0 +1,13 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/background/widgets/weather/WeatherWidget.qml b/dots/.config/quickshell/ii/modules/ii/background/widgets/weather/WeatherWidget.qml
+index ef626700..2e9477bd 100644
+--- a/dots/.config/quickshell/ii/modules/ii/background/widgets/weather/WeatherWidget.qml
++++ b/dots/.config/quickshell/ii/modules/ii/background/widgets/weather/WeatherWidget.qml
+@@ -45,7 +45,7 @@ AbstractBackgroundWidget {
+         MaterialSymbol {
+             iconSize: 80
+             color: Appearance.colors.colOnPrimaryContainer
+-            text: Icons.getWeatherIcon(Weather.data.wCode) ?? "cloud"
++            text: Icons.getWeatherIcon(Weather.data.wCode, Weather.data.isDay) ?? "cloud"
+             anchors {
+                 left: parent.left
+                 bottom: parent.bottom

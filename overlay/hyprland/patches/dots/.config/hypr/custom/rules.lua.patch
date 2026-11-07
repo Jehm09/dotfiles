@@ -1,0 +1,8 @@
+diff --git a/dots/.config/hypr/custom/rules.lua b/dots/.config/hypr/custom/rules.lua
+index 8b137891..743523f7 100644
+--- a/dots/.config/hypr/custom/rules.lua
++++ b/dots/.config/hypr/custom/rules.lua
+@@ -1 +1,3 @@
+ 
++-- Update del sistema (Settings → Update / pantalla de sesión): kitty maximizada, como SUPER+D
++hl.window_rule({match = {class = "^(dotfiles-update)$" }, maximize = true})

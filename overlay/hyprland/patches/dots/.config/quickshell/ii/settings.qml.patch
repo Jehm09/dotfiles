@@ -1,5 +1,5 @@
 diff --git a/dots/.config/quickshell/ii/settings.qml b/dots/.config/quickshell/ii/settings.qml
-index 65c64c16..6f7d45a5 100644
+index 65c64c16..7b5c1228 100644
 --- a/dots/.config/quickshell/ii/settings.qml
 +++ b/dots/.config/quickshell/ii/settings.qml
 @@ -28,6 +28,11 @@ ApplicationWindow {
@@ -36,7 +36,18 @@ index 65c64c16..6f7d45a5 100644
          {
              name: Translation.tr("About"),
              icon: "info",
-@@ -182,10 +197,10 @@ ApplicationWindow {
+@@ -72,6 +87,10 @@ ApplicationWindow {
+     title: "illogical-impulse Settings"
+ 
+     Component.onCompleted: {
++        // QsLaunch.openSettings(page) abre directo en una página (p. ej. desde la barra).
++        const startPage = Quickshell.env("QS_SETTINGS_PAGE");
++        const startIndex = startPage ? root.pages.findIndex(p => p.component.endsWith(`/${startPage}.qml`)) : -1;
++        if (startIndex >= 0) root.currentPage = startIndex;
+         MaterialThemeLoader.reapplyTheme()
+         Config.readWriteDelay = 0 // Settings app always only sets one var at a time so delay isn't needed
+     }
+@@ -182,10 +201,10 @@ ApplicationWindow {
                          buttonText: justCopied ? Translation.tr("Path copied") : Translation.tr("Config file")
                          expanded: navRail.expanded
                          downAction: () => {
@@ -49,7 +60,7 @@ index 65c64c16..6f7d45a5 100644
                              fab.justCopied = true;
                              revertTextTimer.restart()
                          }
-@@ -203,27 +218,51 @@ ApplicationWindow {
+@@ -203,27 +222,51 @@ ApplicationWindow {
                          }
                      }
  

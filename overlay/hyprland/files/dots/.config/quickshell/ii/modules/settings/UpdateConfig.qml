@@ -6,9 +6,9 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 
-// Actualiza end-4 con `setup update shell` (merge + commit + runtime + push).
-// Corre en kitty para que sudo pueda pedir la contraseña; esta página solo
-// muestra el estado (`--status`) y el resultado de la última ejecución.
+// Paquetes del sistema (`setup update system`, vía SystemUpdates) y end-4
+// (`setup update shell`: merge + commit + runtime + push). Ambos corren en kitty
+// para que sudo pida la contraseña; esta página muestra el estado y la última corrida.
 ContentPage {
     id: page
     forceWidth: true
@@ -40,6 +40,20 @@ ContentPage {
         Quickshell.execDetached(["kitty", "-1", "--hold=yes", "--title", "Update end-4",
             page.setupPath, "update", "shell"]);
         runningPoll.start();
+    }
+
+    property bool showPackages: false
+    property bool askingSudoPassword: false
+
+    Connections {
+        target: SystemUpdates
+        function onLaunched() {
+            page.askingSudoPassword = false;
+        }
+    }
+
+    function packageLine(pkg) {
+        return `${pkg.name}  ${pkg.from} → ${pkg.to}`;
     }
 
     function openLog() {
@@ -173,6 +187,270 @@ ContentPage {
         }
     }
 
+    component LastRunRows: ColumnLayout {
+        id: lastRunRows
+        property var run: null
+        property bool alive: false
+        Layout.fillWidth: true
+        spacing: 4
+
+        function formatTime(iso) {
+            return iso ? new Date(iso).toLocaleString(Qt.locale(), Locale.ShortFormat) : "";
+        }
+
+        StyledText {
+            visible: !lastRunRows.run
+            text: Translation.tr("No update has run from here yet.")
+            color: Appearance.colors.colSubtext
+        }
+        InfoRow {
+            visible: !!lastRunRows.run
+            icon: {
+                switch (lastRunRows.run?.state) {
+                case "ok": return "check_circle";
+                case "warning": return "warning";
+                case "conflict": return "merge";
+                case "running": return lastRunRows.alive ? "hourglass_top" : "cancel";
+                default: return "error";
+                }
+            }
+            label: {
+                switch (lastRunRows.run?.state) {
+                case "ok": return Translation.tr("Finished");
+                case "warning": return Translation.tr("With warnings");
+                case "conflict": return Translation.tr("Conflicts");
+                case "running": return lastRunRows.alive ? Translation.tr("Running") : Translation.tr("Interrupted");
+                default: return Translation.tr("Failed");
+                }
+            }
+            value: lastRunRows.run?.state === "running"
+                ? (lastRunRows.alive ? Translation.tr("Step: %1").arg(lastRunRows.run.step) : Translation.tr("The terminal was closed during: %1").arg(lastRunRows.run.step))
+                : (lastRunRows.run?.message ?? "")
+        }
+        InfoRow {
+            visible: !!lastRunRows.run
+            icon: "schedule"
+            label: Translation.tr("When")
+            value: lastRunRows.run?.finished
+                ? Translation.tr("%1 → %2").arg(lastRunRows.formatTime(lastRunRows.run.started)).arg(lastRunRows.formatTime(lastRunRows.run.finished))
+                : lastRunRows.formatTime(lastRunRows.run?.started)
+        }
+    }
+
+    ContentSection {
+        icon: "inventory_2"
+        title: Translation.tr("System packages")
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: SystemUpdates.error !== ""
+            materialIcon: "error"
+            text: SystemUpdates.error
+        }
+
+        StyledIndeterminateProgressBar {
+            Layout.fillWidth: true
+            visible: SystemUpdates.checking || SystemUpdates.running
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: SystemUpdates.rebootNeeded
+            materialIcon: "restart_alt"
+            text: Translation.tr("Reboot to finish the last update:") + "\n" + SystemUpdates.rebootReasons.join("\n")
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: SystemUpdates.news.length > 0
+            materialIcon: "newspaper"
+            text: Translation.tr("Arch news newer than your packages — some ask for manual steps before updating:") + "\n" + SystemUpdates.news.join("\n")
+
+            RippleButtonWithIcon {
+                buttonRadius: Appearance.rounding.small
+                materialIcon: "open_in_new"
+                mainText: Translation.tr("Read")
+                onClicked: Qt.openUrlExternally("https://archlinux.org/news/")
+            }
+        }
+
+        NoticeBox {
+            Layout.fillWidth: true
+            visible: SystemUpdates.packageManagerRunning && !SystemUpdates.running
+            materialIcon: "lock"
+            text: Translation.tr("pacman is running (or left /var/lib/pacman/db.lck behind) — Update is disabled until it finishes.")
+        }
+
+        InfoRow {
+            icon: "deployed_code"
+            label: Translation.tr("Repos")
+            value: {
+                const repo = SystemUpdates.status?.repo;
+                if (!repo) return "…";
+                if (!repo.checked) return repo.error;
+                return repo.packages.length > 0 ? Translation.tr("%1 update(s)").arg(repo.packages.length) : Translation.tr("Up to date");
+            }
+        }
+        InfoRow {
+            icon: "package_2"
+            label: SystemUpdates.status?.helper ? Translation.tr("AUR (%1)").arg(SystemUpdates.status.helper) : Translation.tr("AUR")
+            value: {
+                const aur = SystemUpdates.status?.aur;
+                if (!aur) return "…";
+                if (!aur.checked) return aur.error;
+                return aur.packages.length > 0 ? Translation.tr("%1 update(s)").arg(aur.packages.length) : Translation.tr("Up to date");
+            }
+        }
+        InfoRow {
+            icon: "difference"
+            label: Translation.tr(".pacnew")
+            value: SystemUpdates.pacnew.length > 0
+                ? Translation.tr("%1 config file(s) to merge:").arg(SystemUpdates.pacnew.length) + "\n" + SystemUpdates.pacnew.join("\n")
+                : Translation.tr("None")
+        }
+        // IgnorePkg de /etc/pacman.conf: a la vista para acordarse de sacarlos.
+        InfoRow {
+            visible: SystemUpdates.ignored.length > 0
+            icon: "block"
+            label: Translation.tr("Ignored")
+            value: SystemUpdates.ignored.join("\n") + "\n" + Translation.tr("(IgnorePkg in /etc/pacman.conf)")
+        }
+        InfoRow {
+            icon: "update"
+            label: Translation.tr("Checked")
+            value: SystemUpdates.status?.checkedAt ? page.formatTime(SystemUpdates.status.checkedAt) : "…"
+        }
+
+        ColumnLayout {
+            Layout.fillWidth: true
+            visible: page.showPackages && SystemUpdates.count > 0
+            spacing: 2
+
+            Repeater {
+                model: [
+                    ...SystemUpdates.repoPackages.map(pkg => page.packageLine(pkg)),
+                    ...SystemUpdates.aurPackages.map(pkg => `${page.packageLine(pkg)}  (AUR)`)
+                ]
+                StyledText {
+                    required property var modelData
+                    Layout.fillWidth: true
+                    Layout.leftMargin: 12
+                    text: modelData
+                    font.family: Appearance.font.family.monospace
+                    font.pixelSize: Appearance.font.pixelSize.small
+                    color: Appearance.colors.colOnLayer1
+                    elide: Text.ElideRight
+                }
+            }
+        }
+
+        Flow {
+            Layout.fillWidth: true
+            Layout.topMargin: 6
+            spacing: 8
+
+            RippleButtonWithIcon {
+                implicitWidth: 120
+                buttonRadius: Appearance.rounding.small
+                materialIcon: "refresh"
+                mainText: Translation.tr("Check")
+                enabled: SystemUpdates.setupPath !== "" && !SystemUpdates.checking
+                onClicked: SystemUpdates.refresh()
+            }
+            RippleButtonWithIcon {
+                implicitWidth: 140
+                buttonRadius: Appearance.rounding.small
+                materialIcon: SystemUpdates.running ? "hourglass_top" : "system_update_alt"
+                mainText: SystemUpdates.running ? Translation.tr("Running…")
+                    : SystemUpdates.upToDate ? Translation.tr("Up to date") : Translation.tr("Update")
+                enabled: SystemUpdates.setupPath !== "" && !SystemUpdates.running && !SystemUpdates.packageManagerRunning
+                    && !SystemUpdates.upToDate && !SystemUpdates.checking
+                colBackground: SystemUpdates.count > 0 ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
+                onClicked: {
+                    SystemUpdates.resetAuth();
+                    page.askingSudoPassword = true;
+                    sudoPrompt.focusField();
+                }
+                StyledToolTip {
+                    text: SystemUpdates.upToDate ? Translation.tr("Nothing to update")
+                        : Translation.tr("Opens a terminal and runs the update without questions; rebuilds quickshell if the new Qt broke it")
+                }
+            }
+            RippleButtonWithIcon {
+                visible: SystemUpdates.count > 0
+                implicitWidth: 170
+                buttonRadius: Appearance.rounding.small
+                materialIcon: page.showPackages ? "expand_less" : "expand_more"
+                mainText: page.showPackages ? Translation.tr("Hide packages") : Translation.tr("Show %1 package(s)").arg(SystemUpdates.count)
+                onClicked: page.showPackages = !page.showPackages
+            }
+            RippleButtonWithIcon {
+                visible: SystemUpdates.pacnew.length > 0
+                implicitWidth: 170
+                buttonRadius: Appearance.rounding.small
+                materialIcon: "merge"
+                mainText: Translation.tr("Merge .pacnew")
+                onClicked: SystemUpdates.mergePacnew()
+                StyledToolTip {
+                    text: Translation.tr("Opens `sudo pacdiff` in a terminal (needs pacman-contrib)")
+                }
+            }
+        }
+
+        SudoPasswordPrompt {
+            id: sudoPrompt
+            visible: page.askingSudoPassword && !SystemUpdates.upToDate
+            Layout.topMargin: 4
+            confirmText: Translation.tr("Update")
+            busy: SystemUpdates.authState === "checking"
+            errorText: SystemUpdates.authState === "wrong" ? Translation.tr("Wrong password")
+                : SystemUpdates.authState === "failed" ? Translation.tr("Could not check the password")
+                : ""
+            onSubmitted: password => SystemUpdates.startUpdate("", password)
+            onCancelled: page.askingSudoPassword = false
+        }
+
+        StyledText {
+            Layout.fillWidth: true
+            Layout.topMargin: 4
+            text: Translation.tr("Update asks for your password here and answers nothing else in the terminal: if something needs a decision (a file conflict, a package replacement) it fails and is logged instead of waiting. To answer by hand, run `setup update system` in a terminal.")
+            font.pixelSize: Appearance.font.pixelSize.smaller
+            color: Appearance.colors.colSubtext
+            wrapMode: Text.WordWrap
+        }
+    }
+
+    ContentSection {
+        icon: "history"
+        title: Translation.tr("Last system update")
+
+        LastRunRows {
+            run: SystemUpdates.lastRun
+            alive: SystemUpdates.running
+        }
+        InfoRow {
+            visible: !!SystemUpdates.lastRun?.then
+            icon: SystemUpdates.lastRun?.then === "reboot" ? "restart_alt" : "power_settings_new"
+            label: Translation.tr("Then")
+            value: {
+                const run = SystemUpdates.lastRun;
+                const action = run?.then === "reboot" ? Translation.tr("reboot") : Translation.tr("shut down");
+                if (run?.state === "ok" || run?.state === "warning") return Translation.tr("Started from the session screen to %1 afterwards").arg(action);
+                if (run?.state === "running") return Translation.tr("Will %1 when it finishes").arg(action);
+                return Translation.tr("Did not %1 because the update failed").arg(action);
+            }
+        }
+        RippleButtonWithIcon {
+            visible: !!SystemUpdates.lastRun?.log
+            Layout.topMargin: 6
+            implicitWidth: 140
+            buttonRadius: Appearance.rounding.small
+            materialIcon: "description"
+            mainText: Translation.tr("Open log")
+            onClicked: SystemUpdates.openLog()
+        }
+    }
+
     ContentSection {
         icon: "system_update_alt"
         title: Translation.tr("end-4 shell")
@@ -268,43 +546,11 @@ ContentPage {
 
     ContentSection {
         icon: "history"
-        title: Translation.tr("Last run")
+        title: Translation.tr("Last end-4 update")
 
-        StyledText {
-            visible: !page.lastRun
-            text: Translation.tr("No update has run from here yet.")
-            color: Appearance.colors.colSubtext
-        }
-
-        InfoRow {
-            visible: !!page.lastRun
-            icon: {
-                switch (page.lastRun?.state) {
-                case "ok": return "check_circle";
-                case "conflict": return "merge";
-                case "running": return page.running ? "hourglass_top" : "cancel";
-                default: return "error";
-                }
-            }
-            label: {
-                switch (page.lastRun?.state) {
-                case "ok": return Translation.tr("Finished");
-                case "conflict": return Translation.tr("Conflicts");
-                case "running": return page.running ? Translation.tr("Running") : Translation.tr("Interrupted");
-                default: return Translation.tr("Failed");
-                }
-            }
-            value: page.lastRun?.state === "running"
-                ? (page.running ? Translation.tr("Step: %1").arg(page.lastRun.step) : Translation.tr("The terminal was closed during: %1").arg(page.lastRun.step))
-                : (page.lastRun?.message ?? "")
-        }
-        InfoRow {
-            visible: !!page.lastRun
-            icon: "schedule"
-            label: Translation.tr("When")
-            value: page.lastRun?.finished
-                ? Translation.tr("%1 → %2").arg(page.formatTime(page.lastRun.started)).arg(page.formatTime(page.lastRun.finished))
-                : page.formatTime(page.lastRun?.started)
+        LastRunRows {
+            run: page.lastRun
+            alive: page.running
         }
 
         ColumnLayout {

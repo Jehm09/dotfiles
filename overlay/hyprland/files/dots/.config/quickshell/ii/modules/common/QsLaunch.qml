@@ -14,4 +14,10 @@ Singleton {
     function detached(args) {
         Quickshell.execDetached([...root.cleanEnv, "qs", ...args]);
     }
+
+    // Abre Settings; page = nombre del archivo de la página sin .qml (p. ej. "UpdateConfig").
+    function openSettings(page) {
+        const pageEnv = page ? [`QS_SETTINGS_PAGE=${page}`] : [];
+        Quickshell.execDetached([...root.cleanEnv, ...pageEnv, "qs", "-p", Quickshell.shellPath("settings.qml")]);
+    }
 }
