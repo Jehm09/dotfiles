@@ -19,7 +19,10 @@
 # Usage:
 #   setup update check                     What is stale, changes nothing
 #   setup update all --hyprland            The whole chain, in order
-#   setup update system                    Repos + AUR only
+#   setup update system [--unattended] [--then poweroff|reboot|windows] [--status]
+#                                          Repos + AUR only, logged, rebuilds
+#                                          quickshell if Qt broke it
+#                                          (cmd/lib/system-update.sh)
 #   setup update end4                      Merge upstream and export the overlay
 #   setup update runtime [--force]         Rebuild/reinstall pinned quickshell
 #   setup update pkgs --hyprland           Reinstall from packages/*.conf
@@ -40,28 +43,13 @@ SETUP="$DOTFILES_DIR/setup"
 _desktop=""
 _passthru=()
 _shell_args=()
+_system_args=()
 
 _require_desktop() {
     [[ -n "$_desktop" ]] && return 0
     error "This step needs a desktop: pass --hyprland or --kde."
     error "See: setup update --help"
     exit 1
-}
-
-# The helper to drive the AUR with. Mirrors 'post': whichever is installed wins,
-# and with neither this degrades to plain pacman instead of failing — the repos
-# are the part that matters most and they need no helper.
-_sync_all() {
-    local h
-    for h in paru yay; do
-        if command -v "$h" &>/dev/null; then
-            info "Updating repos and AUR with $h"
-            "$h" -Syu
-            return 0
-        fi
-    done
-    warn "No AUR helper found — updating the official repos only."
-    sudo pacman -Syu
 }
 
 # ------------------------------------------------------------------
@@ -99,8 +87,9 @@ cmd_check() {
 # Individual steps
 # ------------------------------------------------------------------
 cmd_system() {
-    step "1. System packages"
-    _sync_all
+    # --status is JSON for the settings page: nothing else may reach stdout.
+    [[ " ${_system_args[*]} " == *" --status "* ]] || step "1. System packages"
+    bash "$DOTFILES_DIR/cmd/lib/system-update.sh" "${_system_args[@]}"
 }
 
 cmd_end4() {
@@ -167,7 +156,10 @@ Routine maintenance. 'post' builds the machine; this keeps it current.
 
     check             What is stale — changes nothing
     all               Everything below, in order (needs a desktop)
-    system            Official repos + AUR
+    system            Official repos + AUR, logged for the quickshell Update page.
+                      --unattended answers nothing (fails instead of asking),
+                      --then poweroff|reboot|windows does it after a successful run,
+                      --status prints a JSON snapshot and changes nothing
     end4              Merge end-4's changes and export the overlay
     runtime [--force] Reinstall the quickshell build end-4 pins
     pkgs              Reinstall from packages/*.conf (needs a desktop)
@@ -200,7 +192,10 @@ while [[ $# -gt 0 ]]; do
         --hyprland) _desktop="hyprland" ;;
         --kde)      _desktop="kde"      ;;
         --force)    _passthru+=("--force") ;;
-        --status)   _shell_args+=("--status") ;;
+        --status)   _shell_args+=("--status"); _system_args+=("--status") ;;
+        --unattended) _system_args+=("--unattended") ;;
+        --then)     _system_args+=("--then" "${2:-}"); shift ;;
+        --sudo-pass-file) _system_args+=("--sudo-pass-file" "${2:-}"); shift ;;
         -h|--help)  _usage; exit 0 ;;
         -*)         error "Unknown option: $1"; error "See: setup update --help"; exit 1 ;;
         *)
