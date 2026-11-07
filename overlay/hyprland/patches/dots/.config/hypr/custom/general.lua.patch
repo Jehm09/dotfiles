@@ -1,8 +1,8 @@
 diff --git a/dots/.config/hypr/custom/general.lua b/dots/.config/hypr/custom/general.lua
-index 8b137891..e7b297db 100644
+index 8b137891..c337b32b 100644
 --- a/dots/.config/hypr/custom/general.lua
 +++ b/dots/.config/hypr/custom/general.lua
-@@ -1 +1,7 @@
+@@ -1 +1,11 @@
 +-- Hardware cursor: with the software one (what "auto" picks on NVIDIA) the
 +-- pointer is baked into every frame, so grim catches it in screenshots.
 +hl.config({ cursor = { no_hardware_cursors = 0 } })
@@ -10,3 +10,7 @@ index 8b137891..e7b297db 100644
 +-- Hyprland 0.57 started playing the xdg-system-bell ("ding" on backspace in an
 +-- empty field, etc.) with the system sound theme. Muted, as it was before.
 +hl.config({ misc = { bell_sound = "none" } })
++
++-- Never switch the monitors to HDR: with cm_auto_hdr, any fullscreen window that
++-- reports HDR (VS Code/Electron does it with SDR content) flipped the colors.
++hl.config({ render = { cm_auto_hdr = 0 } })
