@@ -100,6 +100,8 @@ ContentPage {
 
     readonly property bool updateAdvised: (status?.ok ?? false)
         && (status.behind > 0 || status.runtime !== "ok" || status.dirty)
+    // Sin fetch (offline) no se sabe si hay commits nuevos: Update queda habilitado.
+    readonly property bool shellUpToDate: (status?.ok ?? false) && status.fetched && !updateAdvised
 
     Component.onCompleted: repoDirView.reload()
 
@@ -434,7 +436,8 @@ ContentPage {
             label: Translation.tr("Then")
             value: {
                 const run = SystemUpdates.lastRun;
-                const action = run?.then === "reboot" ? Translation.tr("reboot") : Translation.tr("shut down");
+                const action = run?.then === "windows" ? Translation.tr("reboot into Windows")
+                    : run?.then === "reboot" ? Translation.tr("reboot") : Translation.tr("shut down");
                 if (run?.state === "ok" || run?.state === "warning") return Translation.tr("Started from the session screen to %1 afterwards").arg(action);
                 if (run?.state === "running") return Translation.tr("Will %1 when it finishes").arg(action);
                 return Translation.tr("Did not %1 because the update failed").arg(action);
@@ -524,12 +527,15 @@ ContentPage {
                 implicitWidth: 140
                 buttonRadius: Appearance.rounding.small
                 materialIcon: page.running ? "hourglass_top" : "system_update_alt"
-                mainText: page.running ? Translation.tr("Running…") : Translation.tr("Update")
+                mainText: page.running ? Translation.tr("Running…")
+                    : page.shellUpToDate ? Translation.tr("Up to date") : Translation.tr("Update")
                 enabled: page.setupPath !== "" && !page.running && !(page.status?.merging ?? false)
+                    && !page.shellUpToDate && !page.checking
                 colBackground: page.updateAdvised ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
                 onClicked: page.startUpdate()
                 StyledToolTip {
-                    text: Translation.tr("Opens a terminal: merges end-4, commits overlay/, rebuilds quickshell if needed, restarts the bar and pushes")
+                    text: page.shellUpToDate ? Translation.tr("Nothing to update")
+                        : Translation.tr("Opens a terminal: merges end-4, commits overlay/, rebuilds quickshell if needed, restarts the bar and pushes")
                 }
             }
         }
