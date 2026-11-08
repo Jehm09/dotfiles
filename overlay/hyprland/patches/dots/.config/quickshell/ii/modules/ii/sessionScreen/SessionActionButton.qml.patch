@@ -1,0 +1,12 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionActionButton.qml b/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionActionButton.qml
+index 000c4e20..0d8e54e4 100644
+--- a/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionActionButton.qml
++++ b/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionActionButton.qml
+@@ -21,6 +21,7 @@ RippleButton {
+         Appearance.m3colors.m3onPrimary : Appearance.colors.colOnLayer0
+ 
+     Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
++    opacity: enabled ? 1 : 0.4
+     background.implicitHeight: size
+     background.implicitWidth: size
+ 

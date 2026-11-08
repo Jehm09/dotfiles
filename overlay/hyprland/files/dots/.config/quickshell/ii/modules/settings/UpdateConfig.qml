@@ -6,9 +6,9 @@ import qs.services
 import qs.modules.common
 import qs.modules.common.widgets
 
-// Paquetes del sistema (`setup update system`, vía SystemUpdates) y end-4
-// (`setup update shell`: merge + commit + runtime + push). Ambos corren en kitty
-// para que sudo pida la contraseña; esta página muestra el estado y la última corrida.
+// Paquetes del sistema (`setup update system --background`, vía SystemUpdates: sin terminal,
+// con loader acá mismo) y end-4 (`setup update shell`: merge + commit + runtime + push, en kitty).
+// Esta página muestra el estado, el progreso y la última corrida.
 ContentPage {
     id: page
     forceWidth: true
@@ -252,7 +252,12 @@ ContentPage {
 
         StyledIndeterminateProgressBar {
             Layout.fillWidth: true
-            visible: SystemUpdates.checking || SystemUpdates.running
+            visible: SystemUpdates.checking && !SystemUpdates.busy
+        }
+
+        UpdateProgress {
+            Layout.fillWidth: true
+            Layout.bottomMargin: 6
         }
 
         NoticeBox {
@@ -362,10 +367,10 @@ ContentPage {
             RippleButtonWithIcon {
                 implicitWidth: 140
                 buttonRadius: Appearance.rounding.small
-                materialIcon: SystemUpdates.running ? "hourglass_top" : "system_update_alt"
-                mainText: SystemUpdates.running ? Translation.tr("Running…")
+                materialIcon: SystemUpdates.busy ? "hourglass_top" : "system_update_alt"
+                mainText: SystemUpdates.busy ? Translation.tr("Running…")
                     : SystemUpdates.upToDate ? Translation.tr("Up to date") : Translation.tr("Update")
-                enabled: SystemUpdates.setupPath !== "" && !SystemUpdates.running && !SystemUpdates.packageManagerRunning
+                enabled: SystemUpdates.setupPath !== "" && !SystemUpdates.busy && !SystemUpdates.packageManagerRunning
                     && !SystemUpdates.upToDate && !SystemUpdates.checking
                 colBackground: SystemUpdates.count > 0 ? Appearance.colors.colPrimaryContainer : Appearance.colors.colLayer2
                 onClicked: {
@@ -375,7 +380,7 @@ ContentPage {
                 }
                 StyledToolTip {
                     text: SystemUpdates.upToDate ? Translation.tr("Nothing to update")
-                        : Translation.tr("Opens a terminal and runs the update without questions; rebuilds quickshell if the new Qt broke it")
+                        : Translation.tr("Runs the update here, without questions; rebuilds quickshell if the new Qt broke it")
                 }
             }
             RippleButtonWithIcon {
@@ -401,7 +406,7 @@ ContentPage {
 
         SudoPasswordPrompt {
             id: sudoPrompt
-            visible: page.askingSudoPassword && !SystemUpdates.upToDate
+            visible: page.askingSudoPassword && !SystemUpdates.upToDate && !SystemUpdates.busy
             Layout.topMargin: 4
             confirmText: Translation.tr("Update")
             busy: SystemUpdates.authState === "checking"
@@ -415,7 +420,7 @@ ContentPage {
         StyledText {
             Layout.fillWidth: true
             Layout.topMargin: 4
-            text: Translation.tr("Update asks for your password here and answers nothing else in the terminal: if something needs a decision (a file conflict, a package replacement) it fails and is logged instead of waiting. To answer by hand, run `setup update system` in a terminal.")
+            text: Translation.tr("Update asks for your password here and runs in the background — closing this window does not stop it. It answers nothing: if something needs a decision (a file conflict, a package replacement) it fails and is logged instead of waiting. To answer by hand, run `setup update system` in a terminal.")
             font.pixelSize: Appearance.font.pixelSize.smaller
             color: Appearance.colors.colSubtext
             wrapMode: Text.WordWrap

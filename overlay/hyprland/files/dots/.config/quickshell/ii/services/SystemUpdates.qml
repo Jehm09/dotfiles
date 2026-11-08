@@ -49,6 +49,8 @@ Singleton {
     readonly property int powerAt: lastRun?.powerAt ?? 0
     readonly property bool powerPending: powerAt > 0 && lockAlive
     property int powerSecondsLeft: 0
+    // Se pidió no apagar/reiniciar: vale durante la corrida o en la cuenta regresiva.
+    property bool powerCancelled: false
     // Lo que muestra el loader mientras corre: el paso y la última línea del log.
     readonly property bool busy: starting || running || powerPending
     readonly property string currentStep: lastRun?.state === "running" ? (lastRun?.step ?? "") : ""
@@ -98,13 +100,16 @@ Singleton {
         Quickshell.execDetached(["setsid", "-f", "bash", "-c", 'exec "$@" >/dev/null 2>&1 </dev/null', "bash", ...args]);
         root.logTail = "";
         root.launchedAt = Date.now();
+        root.powerCancelled = false;
         root.starting = true;
         startingTimeout.restart();
         passFileCleanup.restart();
     }
 
     function cancelPower() {
-        if (root.powerPending) Quickshell.execDetached(["touch", root.cancelPowerFile]);
+        if (!root.busy) return;
+        Quickshell.execDetached(["touch", root.cancelPowerFile]);
+        root.powerCancelled = true;
     }
 
     function openLog() {

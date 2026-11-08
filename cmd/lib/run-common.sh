@@ -18,7 +18,12 @@ run_begin() {   # run_begin <lock file> <log name>
 
     _started="$(date -Iseconds)"
     _log="$STATE_DIR/logs/$2-$(date +%Y%m%d-%H%M%S).log"
-    exec > >(tee -a "$_log") 2>&1
+    # In a terminal: screen + log. Launched from the shell (no terminal): log only.
+    if [[ -t 1 ]]; then
+        exec > >(tee -a "$_log") 2>&1
+    else
+        exec >>"$_log" 2>&1 </dev/null
+    fi
 }
 
 # True while a run holds the lock (the state file alone says "running" forever

@@ -19,7 +19,7 @@
 # Usage:
 #   setup update check                     What is stale, changes nothing
 #   setup update all --hyprland            The whole chain, in order
-#   setup update system [--unattended] [--then poweroff|reboot|windows] [--status]
+#   setup update system [--unattended|--background] [--then poweroff|reboot|windows] [--status]
 #                                          Repos + AUR only, logged, rebuilds
 #                                          quickshell if Qt broke it
 #                                          (cmd/lib/system-update.sh)
@@ -158,6 +158,8 @@ Routine maintenance. 'post' builds the machine; this keeps it current.
     all               Everything below, in order (needs a desktop)
     system            Official repos + AUR, logged for the quickshell Update page.
                       --unattended answers nothing (fails instead of asking),
+                      --background is that without a terminal (the quickshell
+                      loader; needs --sudo-pass-file, output only in the log),
                       --then poweroff|reboot|windows does it after a successful run,
                       --status prints a JSON snapshot and changes nothing
     end4              Merge end-4's changes and export the overlay
@@ -194,6 +196,7 @@ while [[ $# -gt 0 ]]; do
         --force)    _passthru+=("--force") ;;
         --status)   _shell_args+=("--status"); _system_args+=("--status") ;;
         --unattended) _system_args+=("--unattended") ;;
+        --background) _system_args+=("--background") ;;
         --then)     _system_args+=("--then" "${2:-}"); shift ;;
         --sudo-pass-file) _system_args+=("--sudo-pass-file" "${2:-}"); shift ;;
         -h|--help)  _usage; exit 0 ;;

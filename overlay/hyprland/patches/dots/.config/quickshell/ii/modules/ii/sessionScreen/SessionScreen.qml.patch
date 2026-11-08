@@ -1,5 +1,5 @@
 diff --git a/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionScreen.qml b/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionScreen.qml
-index 78b93c4d..7e46327c 100644
+index 78b93c4d..6cd26256 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionScreen.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sessionScreen/SessionScreen.qml
 @@ -19,8 +19,10 @@ Scope {
@@ -14,7 +14,7 @@ index 78b93c4d..7e46327c 100644
          }
  
          Connections {
-@@ -36,16 +38,74 @@ Scope {
+@@ -36,16 +38,79 @@ Scope {
              id: sessionRoot
              visible: sessionLoader.active
              property string subtitle
@@ -27,10 +27,15 @@ index 78b93c4d..7e46327c 100644
 +            property string passwordFor: "update"
 +            readonly property bool passwordForWindows: passwordFor === "windows"
 +
++            // El update corre sin terminal: la pantalla queda abierta con el loader
++            // (Esc la oculta y el update sigue; al reabrirla vuelve a verse).
 +            Connections {
 +                target: SystemUpdates
 +                function onLaunched() {
-+                    if (sessionRoot.askingPassword) sessionRoot.hide();
++                    if (!sessionRoot.askingPassword || sessionRoot.passwordForWindows) return;
++                    sessionRoot.askingPassword = false;
++                    sessionRoot.pendingPower = "";
++                    sessionLock.forceActiveFocus();
 +                }
 +            }
  
@@ -47,7 +52,7 @@ index 78b93c4d..7e46327c 100644
 +
 +            // Con paquetes pendientes pregunta primero; usa el conteo en caché si el chequeo sigue corriendo.
 +            function requestPower(action) {
-+                if (SystemUpdates.count > 0 && SystemUpdates.setupPath !== "" && !SystemUpdates.running
++                if (SystemUpdates.count > 0 && SystemUpdates.setupPath !== "" && !SystemUpdates.busy
 +                        && !SessionWarnings.packageManagerRunning) {
 +                    sessionRoot.pendingPower = action;
 +                    updateFirstButton.forceActiveFocus();
@@ -90,7 +95,7 @@ index 78b93c4d..7e46327c 100644
  
              anchors {
                  top: true
-@@ -71,7 +131,8 @@ Scope {
+@@ -71,7 +136,8 @@ Scope {
  
                  Keys.onPressed: event => {
                      if (event.key === Qt.Key_Escape) {
@@ -100,7 +105,7 @@ index 78b93c4d..7e46327c 100644
                      }
                  }
  
-@@ -87,7 +148,11 @@ Scope {
+@@ -87,7 +153,12 @@ Scope {
                              pixelSize: Appearance.font.pixelSize.title
                              variableAxes: Appearance.font.variableAxes.title
                          }
@@ -109,11 +114,12 @@ index 78b93c4d..7e46327c 100644
 +                            ? (sessionRoot.passwordForWindows ? Translation.tr("Password to reboot into Windows") : Translation.tr("Password to update"))
 +                            : sessionRoot.pendingPower
 +                            ? (sessionRoot.pendingReboot ? Translation.tr("Update before rebooting?") : Translation.tr("Update before shutting down?"))
++                            : SystemUpdates.busy ? Translation.tr("System update")
 +                            : Translation.tr("Session")
                      }
  
                      StyledText {
-@@ -95,11 +160,81 @@ Scope {
+@@ -95,11 +166,101 @@ Scope {
                          Layout.alignment: Qt.AlignHCenter
                          horizontalAlignment: Text.AlignHCenter
                          font.pixelSize: Appearance.font.pixelSize.normal
@@ -123,10 +129,30 @@ index 78b93c4d..7e46327c 100644
 +                            : sessionRoot.pendingPower
 +                            ? Translation.tr("%1 update(s) waiting: %2 from the repos, %3 from the AUR\nIf the update fails nothing is turned off — Esc to go back")
 +                                .arg(SystemUpdates.count).arg(SystemUpdates.repoPackages.length).arg(SystemUpdates.aurPackages.length)
++                            : SystemUpdates.busy ? Translation.tr("Esc or click anywhere hides this — the update keeps running")
 +                            : Translation.tr("Arrow keys to navigate, Enter to select\nEsc or click anywhere to cancel")
-                     }
-                 }
- 
++                    }
++                }
++
++                Rectangle {
++                    visible: SystemUpdates.busy && !sessionRoot.askingPassword
++                    Layout.alignment: Qt.AlignHCenter
++                    Layout.preferredWidth: 560
++                    implicitHeight: sessionProgress.implicitHeight + 32
++                    radius: Appearance.rounding.normal
++                    color: Appearance.colors.colLayer1
++
++                    // Un clic en el fondo del loader no cierra la pantalla.
++                    MouseArea {
++                        anchors.fill: parent
++                    }
++                    UpdateProgress {
++                        id: sessionProgress
++                        anchors.fill: parent
++                        anchors.margins: 16
++                    }
++                }
++
 +                SudoPasswordPrompt {
 +                    id: passwordPrompt
 +                    visible: sessionRoot.askingPassword
@@ -187,16 +213,16 @@ index 78b93c4d..7e46327c 100644
 +                                sessionRoot.subtitle = buttonText;
 +                        }
 +                        KeyNavigation.left: skipUpdateButton
-+                    }
-+                }
-+
+                     }
+                 }
+ 
 +                // Fila 1 = sesión, fila 2 = energía.
                  GridLayout {
 +                    visible: sessionRoot.pendingPower === "" && !sessionRoot.askingPassword
                      columns: 4
                      columnSpacing: 15
                      rowSpacing: 15
-@@ -118,7 +253,7 @@ Scope {
+@@ -118,7 +279,7 @@ Scope {
                                  sessionRoot.subtitle = buttonText;
                          }
                          KeyNavigation.right: sessionSleep
@@ -205,7 +231,7 @@ index 78b93c4d..7e46327c 100644
                      }
                      SessionActionButton {
                          id: sessionSleep
-@@ -134,7 +269,7 @@ Scope {
+@@ -134,7 +295,7 @@ Scope {
                          }
                          KeyNavigation.left: sessionLock
                          KeyNavigation.right: sessionLogout
@@ -214,7 +240,7 @@ index 78b93c4d..7e46327c 100644
                      }
                      SessionActionButton {
                          id: sessionLogout
-@@ -150,7 +285,7 @@ Scope {
+@@ -150,7 +311,7 @@ Scope {
                          }
                          KeyNavigation.left: sessionSleep
                          KeyNavigation.right: sessionTaskManager
@@ -223,7 +249,7 @@ index 78b93c4d..7e46327c 100644
                      }
                      SessionActionButton {
                          id: sessionTaskManager
-@@ -168,50 +303,42 @@ Scope {
+@@ -168,55 +329,52 @@ Scope {
                          KeyNavigation.down: sessionFirmwareReboot
                      }
  
@@ -244,6 +270,8 @@ index 78b93c4d..7e46327c 100644
 -                    }
                      SessionActionButton {
                          id: sessionShutdown
++                        // Apagar a mitad de pacman deja el sistema roto: se espera al update.
++                        enabled: !SystemUpdates.running && !SystemUpdates.starting
                          buttonIcon: "power_settings_new"
                          buttonText: Translation.tr("Shutdown")
 -                        onClicked: {
@@ -262,6 +290,7 @@ index 78b93c4d..7e46327c 100644
                      }
                      SessionActionButton {
                          id: sessionReboot
++                        enabled: !SystemUpdates.running && !SystemUpdates.starting
                          buttonIcon: "restart_alt"
                          buttonText: Translation.tr("Reboot")
 -                        onClicked: {
@@ -279,6 +308,7 @@ index 78b93c4d..7e46327c 100644
 +                    }
 +                    SessionActionButton {
 +                        id: sessionWindowsReboot
++                        enabled: !SystemUpdates.running && !SystemUpdates.starting
 +                        visible: WindowsBoot.available
 +                        buttonIcon: "desktop_windows"
 +                        buttonText: Translation.tr("Reboot into Windows")
@@ -291,7 +321,13 @@ index 78b93c4d..7e46327c 100644
                          KeyNavigation.right: sessionFirmwareReboot
                          KeyNavigation.up: sessionLogout
                      }
-@@ -227,8 +354,8 @@ Scope {
+                     SessionActionButton {
+                         id: sessionFirmwareReboot
++                        enabled: !SystemUpdates.running && !SystemUpdates.starting
+                         buttonIcon: "settings_applications"
+                         buttonText: Translation.tr("Reboot to firmware settings")
+                         onClicked: {
+@@ -227,8 +385,8 @@ Scope {
                              if (focus)
                                  sessionRoot.subtitle = buttonText;
                          }
@@ -301,7 +337,7 @@ index 78b93c4d..7e46327c 100644
                      }
                  }
  
-@@ -246,6 +373,29 @@ Scope {
+@@ -246,6 +404,29 @@ Scope {
                  }
                  spacing: 10
  

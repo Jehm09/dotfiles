@@ -2,7 +2,7 @@
 #
 # system-update.sh — official repos + AUR as one logged run, for the "Update"
 # page in quickshell settings and the "update before shutdown" prompt of the
-# session screen (both open it in kitty so sudo can ask for the password).
+# session screen (both run it with --background and show a loader; nothing opens).
 #
 #   setup update system                          paru/yay -Syu, interactive
 #   setup update system --unattended             no prompts: anything that needs
@@ -12,9 +12,14 @@
 #                                                reboot into Windows (one boot only) —
 #                                                only if it succeeded
 #   setup update system --status                 JSON snapshot, changes nothing
+#   setup update system --background ...         --unattended without a terminal: what
+#                                                the quickshell loader launches. Output
+#                                                only in the log; sudo answers through
+#                                                SUDO_ASKPASS; the power off countdown is
+#                                                cancelled from the loader ($POWER_CANCEL_FILE)
 #   ... --sudo-pass-file <file>                  password typed in the quickshell box;
-#                                                read once and deleted (falls back to
-#                                                asking in the terminal)
+#                                                deleted when the run ends (in a terminal,
+#                                                falls back to asking there)
 #
 # Two passes: the official repos first (a failure there stops everything, the
 # power off/reboot included) and then the AUR, where a package that does not
@@ -40,8 +45,14 @@ PACMAN_DB_LOCK="/var/lib/pacman/db.lck"
 export CHECKUPDATES_DB="${XDG_CACHE_HOME:-$HOME/.cache}/dotfiles/checkup-db"
 # Seconds to cancel the power off / reboot after a successful run.
 POWER_COUNTDOWN=10
+# The loader's Cancel button creates it, during the run or the countdown.
+POWER_CANCEL_FILE="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/dotfiles-system-update.cancel-power"
 
 _unattended=false
+_background=false
+_askpass_dir=""
+# Epoch when the power off happens; 0 = no countdown. The loader shows it.
+_power_at=0
 _then=""
 _pass_file=""
 _aur_failed=()
@@ -124,10 +135,11 @@ _state() {   # _state <state> <message>
     jq -n --arg state "$state" --arg step "$_step" --arg message "$message" \
         --arg started "$_started" --arg finished "$finished" --arg log "$_log" \
         --arg then "$_then" --argjson unattended "$_unattended" --argjson changed "$changed" \
+        --argjson powerAt "$_power_at" \
         --argjson reboot "$reboot" --argjson pacnew "$pacnew" \
         --argjson aurFailed "$(printf '%s\n' "${_aur_failed[@]}" | jq -R -s -c 'split("\n") | map(select(length > 0))')" \
         '{state: $state, step: $step, message: $message, started: $started, finished: $finished,
-          log: $log, then: $then, unattended: $unattended, changed: $changed,
+          log: $log, then: $then, unattended: $unattended, changed: $changed, powerAt: $powerAt,
           rebootReasons: $reboot, pacnew: $pacnew, aurFailed: $aurFailed}' >"$STATE_FILE.tmp"
     mv "$STATE_FILE.tmp" "$STATE_FILE"
 }
@@ -206,23 +218,54 @@ _unlock_sudo_from_file() {
     return 0
 }
 
+# Without a terminal sudo caches nothing between processes (no tty to key the
+# timestamp on), and paru/makepkg/deps each call it. A `sudo` first in PATH adds
+# -A, and the askpass prints the password from a 0600 file in $XDG_RUNTIME_DIR
+# that lives exactly as long as the run (the EXIT trap deletes it).
+_unlock_sudo_askpass() {
+    [[ -n "$_pass_file" && -s "$_pass_file" ]] \
+        || _fail_msg "No password from the box — the background update needs one."
+    _askpass_dir="$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/dotfiles-sudo-run.XXXXXX")"
+    # Moved, not copied: the box's 60 s cleanup timer then has nothing to delete.
+    mv -- "$_pass_file" "$_askpass_dir/pass"
+    _pass_file="$_askpass_dir/pass"
+    chmod 600 "$_pass_file"
+    printf '#!/bin/sh\ncat %q\n' "$_pass_file" >"$_askpass_dir/askpass"
+    printf '#!/bin/sh\nexec /usr/bin/sudo -A "$@"\n' >"$_askpass_dir/sudo"
+    chmod 700 "$_askpass_dir/askpass" "$_askpass_dir/sudo"
+    export SUDO_ASKPASS="$_askpass_dir/askpass"
+    export PATH="$_askpass_dir:$PATH"
+    sudo -v || _fail_msg "sudo did not accept the password from the box."
+    success "sudo unlocked with the password from the box"
+}
+
 # Number of the "Windows Boot Manager" UEFI entry (e.g. 0002); empty without dual boot.
 _windows_boot_entry() {
     efibootmgr 2>/dev/null | sed -n 's/^Boot\([0-9A-Fa-f]\{4\}\)\*\{0,1\} Windows Boot Manager.*/\1/p' | head -1
 }
 
-_power() {
+_power() {   # _power <final state> <final message>
     local label="${_then^}"
     [[ "$_then" == windows ]] && label="Reboot into Windows"
+    _power_at=$(($(date +%s) + POWER_COUNTDOWN))
+    _state "$1" "$2"
     echo
-    local key=""
-    if read -r -t "$POWER_COUNTDOWN" -n 1 -s \
-        -p "==> $label in ${POWER_COUNTDOWN}s — press any key to cancel " key; then
-        echo
-        warn "$label cancelled."
-        return 0
+    if [[ -t 0 ]]; then
+        info "$label in ${POWER_COUNTDOWN}s — press any key to cancel"
+    else
+        info "$label in ${POWER_COUNTDOWN}s — Cancel in the shell stops it"
     fi
-    echo
+    local key=""
+    while (($(date +%s) < _power_at)); do
+        if [[ -e "$POWER_CANCEL_FILE" ]] || { [[ -t 0 ]] && read -r -t 0.5 -n 1 -s key; }; then
+            rm -f -- "$POWER_CANCEL_FILE"
+            _power_at=0
+            _state "$1" "$2 $label cancelled."
+            warn "$label cancelled."
+            return 0
+        fi
+        [[ -t 0 ]] || sleep 0.5
+    done
     info "$label…"
     case "$_then" in
         poweroff) systemctl poweroff || loginctl poweroff ;;
@@ -247,16 +290,21 @@ cmd_run() {
     run_begin "$RUN_LOCK" system-update
     trap _fail_unexpected ERR
     # The password file never outlives the run, even if it stops before reading it.
-    trap 'sudo_stop_keepalive; rm -f -- "${_pass_file:-/nonexistent}"' EXIT
+    trap 'sudo_stop_keepalive; rm -f -- "${_pass_file:-/nonexistent}"; [[ -z "$_askpass_dir" ]] || rm -rf -- "$_askpass_dir"' EXIT
 
     _phase "Preflight"
+    rm -f -- "$POWER_CANCEL_FILE"   # left over from an earlier run
     [[ -e "$PACMAN_DB_LOCK" ]] \
         && _fail_msg "pacman is already running (or crashed and left $PACMAN_DB_LOCK)."
     local helper
     helper="$(_helper)"
     [[ -z "$helper" ]] && warn "No AUR helper found — updating the official repos only."
     $_unattended && info "Unattended: anything that needs an answer fails instead of waiting."
-    _unlock_sudo_from_file
+    if $_background; then
+        _unlock_sudo_askpass
+    else
+        _unlock_sudo_from_file
+    fi
     # One password up front (no prompt if the box already unlocked sudo); the
     # keepalive covers long AUR or quickshell builds.
     sudo_keepalive
@@ -329,7 +377,7 @@ cmd_run() {
     [[ -n "$reasons" ]] && sed 's/^/      /' <<<"$reasons"
     run_notify "$title" "$msg"
 
-    [[ -n "$_then" ]] && _power
+    [[ -n "$_then" ]] && _power "$final" "$msg"
     return 0
 }
 
@@ -392,6 +440,9 @@ cmd_status() {
           news: $news, rebootReasons: $reboot, pacnew: $pacnew, ignored: $ignored}'
 }
 
+# Sourced (tests) = functions only.
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
+
 # ------------------------------------------------------------------
 # Flags
 # ------------------------------------------------------------------
@@ -400,6 +451,7 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --status)     _mode=status ;;
         --unattended) _unattended=true ;;
+        --background) _background=true; _unattended=true ;;
         --sudo-pass-file)
             _pass_file="${2:-}"
             shift
