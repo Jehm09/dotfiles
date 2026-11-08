@@ -22,6 +22,8 @@ Singleton {
     readonly property string repoDirFile: `${dataHome}/dotfiles/upstream/.git/dotfiles-repo-dir`
     readonly property string lastRunFile: `${stateHome}/dotfiles/system-update.json`
     readonly property string runLockFile: `${runtimeDir}/dotfiles-system-update.lock`
+    // system-update.sh lo busca durante la cuenta regresiva de apagado/reinicio.
+    readonly property string cancelPowerFile: `${runtimeDir}/dotfiles-system-update.cancel-power`
 
     property string repoDir: ""
     readonly property string setupPath: repoDir ? `${repoDir}/setup` : ""
@@ -34,12 +36,23 @@ Singleton {
     property string pendingThen: ""
     property string passFile: ""
     property string password: ""
-    // La terminal ya abrió con la contraseña: quien mostró el cuadro lo cierra.
+    // La corrida ya arrancó con la contraseña: quien mostró el cuadro lo cierra.
     signal launched
 
     readonly property bool checking: statusProc.running
-    // El state file dice "running" para siempre si se cerró la terminal a mitad: manda el lock.
+    // Entre lanzar el script y que escriba "running" en el state file (~1 s).
+    property bool starting: false
+    property real launchedAt: 0
+    // El state file dice "running" para siempre si el proceso murió a mitad: manda el lock.
     readonly property bool running: (lastRun?.state === "running") && lockAlive
+    // Cuenta regresiva para apagar/reiniciar al terminar: epoch en segundos, 0 = no hay.
+    readonly property int powerAt: lastRun?.powerAt ?? 0
+    readonly property bool powerPending: powerAt > 0 && lockAlive
+    property int powerSecondsLeft: 0
+    // Lo que muestra el loader mientras corre: el paso y la última línea del log.
+    readonly property bool busy: starting || running || powerPending
+    readonly property string currentStep: lastRun?.state === "running" ? (lastRun?.step ?? "") : ""
+    property string logTail: ""
     readonly property var repoPackages: status?.repo?.packages ?? []
     readonly property var aurPackages: status?.aur?.packages ?? []
     readonly property int count: repoPackages.length + aurPackages.length
@@ -64,8 +77,8 @@ Singleton {
         if (!authProc.running) root.authState = "idle";
     }
 
-    // then: "", "poweroff" o "reboot". Valida la contraseña con sudo antes de abrir la terminal,
-    // así un error se corrige en el cuadro y no en kitty.
+    // then: "", "poweroff", "reboot" o "windows". Valida la contraseña con sudo antes de lanzar,
+    // así un error se corrige en el cuadro.
     function startUpdate(then, password) {
         if (!root.setupPath || root.running || authProc.running) return false;
         root.pendingThen = then ?? "";
@@ -77,12 +90,21 @@ Singleton {
         return true;
     }
 
-    // Clase propia: una regla de Hyprland (custom/rules.lua) la abre maximizada, como SUPER+D.
-    function launchTerminal() {
-        const args = [root.setupPath, "update", "system", "--unattended", "--sudo-pass-file", root.passFile];
+    // Sin terminal: la salida va solo al log y el progreso se ve en el loader (UpdateProgress).
+    // Desacoplado de quickshell, así sigue aunque se cierre Settings o se reinicie la barra.
+    function launchRun() {
+        const args = [root.setupPath, "update", "system", "--background", "--sudo-pass-file", root.passFile];
         if (root.pendingThen) args.push("--then", root.pendingThen);
-        Quickshell.execDetached(["kitty", "--class", "dotfiles-update", "--hold=yes", "--title", "System update", ...args]);
+        Quickshell.execDetached(["setsid", "-f", "bash", "-c", 'exec "$@" >/dev/null 2>&1 </dev/null', "bash", ...args]);
+        root.logTail = "";
+        root.launchedAt = Date.now();
+        root.starting = true;
+        startingTimeout.restart();
         passFileCleanup.restart();
+    }
+
+    function cancelPower() {
+        if (root.powerPending) Quickshell.execDetached(["touch", root.cancelPowerFile]);
     }
 
     function openLog() {
@@ -118,7 +140,10 @@ Singleton {
             try {
                 const previous = root.lastRun?.state;
                 root.lastRun = JSON.parse(text());
-                if (root.lastRun.state === "running") lockProc.running = true;
+                // Una corrida que falla al instante (preflight) termina antes de que se vea el lock.
+                if (root.starting && root.lastRun.state !== "running"
+                        && Date.parse(root.lastRun.started) >= root.launchedAt - 5000) root.starting = false;
+                if (root.lastRun.state === "running" || (root.lastRun.powerAt ?? 0) > 0) lockProc.running = true;
                 // Al terminar una corrida cambian los paquetes pendientes.
                 else if (previous === "running") root.refresh();
             } catch (e) {
@@ -161,7 +186,7 @@ Singleton {
         onExited: (exitCode, exitStatus) => {
             if (exitCode === 0) {
                 root.authState = "idle";
-                root.launchTerminal();
+                root.launchRun();
                 root.launched();
             } else {
                 root.authState = exitCode === 3 ? "wrong" : "failed";
@@ -169,7 +194,8 @@ Singleton {
         }
     }
 
-    // Por si kitty no llegó a arrancar: el archivo con la contraseña no queda dando vueltas.
+    // Por si el script no llegó a arrancar: el archivo con la contraseña no queda dando vueltas
+    // (el script lo mueve a su propia carpeta al empezar, así que esto no le afecta).
     Timer {
         id: passFileCleanup
         interval: 60 * 1000
@@ -180,14 +206,49 @@ Singleton {
     Process {
         id: lockProc
         command: ["flock", "-n", root.runLockFile, "true"]
-        onExited: (exitCode, exitStatus) => root.lockAlive = exitCode !== 0
+        onExited: (exitCode, exitStatus) => {
+            root.lockAlive = exitCode !== 0;
+            if (root.lockAlive) root.starting = false;
+        }
     }
 
     Timer {
         interval: 5000
         repeat: true
-        running: root.lastRun?.state === "running"
+        running: root.lastRun?.state === "running" || root.powerAt > 0
         onTriggered: lockProc.running = true
+    }
+
+    // Si el script no escribe "running" a tiempo (falló al arrancar), el loader no queda colgado.
+    Timer {
+        id: startingTimeout
+        interval: 20 * 1000
+        onTriggered: root.starting = false
+    }
+
+    Timer {
+        interval: 250
+        repeat: true
+        running: root.powerPending
+        triggeredOnStart: true
+        onTriggered: root.powerSecondsLeft = Math.max(0, Math.ceil(root.powerAt - Date.now() / 1000))
+    }
+
+    // Última línea con texto del log: sin colores ni las barras de progreso de pacman (\r).
+    Process {
+        id: tailProc
+        command: ["bash", "-c", 'tail -c 4096 -- "$1" | tr "\\r" "\\n" | sed "s/\\x1b\\[[0-9;]*[A-Za-z]//g" | grep -v "^[[:space:]]*$" | tail -n 1', "bash", root.lastRun?.log ?? ""]
+        stdout: StdioCollector {
+            onStreamFinished: root.logTail = text.trim()
+        }
+    }
+
+    Timer {
+        interval: 1000
+        repeat: true
+        running: root.running && !!root.lastRun?.log
+        triggeredOnStart: true
+        onTriggered: if (!tailProc.running) tailProc.running = true
     }
 
     Timer {
