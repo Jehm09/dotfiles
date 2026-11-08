@@ -1,15 +1,15 @@
 diff --git a/dots/.config/hypr/hyprland/keybinds.lua b/dots/.config/hypr/hyprland/keybinds.lua
-index d54d25bd..8aa8a94f 100644
+index f388263b..8aa8a94f 100644
 --- a/dots/.config/hypr/hyprland/keybinds.lua
 +++ b/dots/.config/hypr/hyprland/keybinds.lua
 @@ -9,10 +9,28 @@ local hyprScripts = "$HOME/.config/hypr/hyprland/scripts"
  local qsIpcCall = "qs -c $qsConfig ipc call"
  local qsIsAlive = qsIpcCall .. " TEST_ALIVE"
  
--hl.bind("SUPER + SUPER_L", hl.dsp.global("quickshell:searchToggleRelease"), { description = "Shell: Toggle search" })
--hl.bind("SUPER + SUPER_R", hl.dsp.global("quickshell:searchToggleRelease"))
--hl.bind("SUPER + SUPER_L", hl.dsp.exec_cmd(qsIsAlive .. " || pkill fuzzel || fuzzel"))
--hl.bind("SUPER + SUPER_R", hl.dsp.exec_cmd(qsIsAlive .. " || pkill fuzzel || fuzzel"))
+-local searchToggle = hl.dsp.exec_cmd(qsIpcCall .. " search toggle || pkill fuzzel || fuzzel")
+-hl.bind("SUPER + SUPER_L", searchToggle,
+-    { release = true, description = "Shell: Toggle search" })
+-hl.bind("SUPER + SUPER_R", searchToggle, { release = true })
 +-- Hyprland release bind, not quickshell's searchToggleRelease: Hyprland skips the
 +-- release when another key was pressed while Super was held (SUPER+1, etc.).
 +-- searchToggleRelease fires on every release and needs searchToggleReleaseInterrupt
