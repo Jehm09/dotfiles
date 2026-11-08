@@ -507,7 +507,7 @@ ContentPage {
             icon: "edit_note"
             label: Translation.tr("Local edits")
             value: page.status?.merging
-                ? Translation.tr("A merge is in progress in the clone — finish or abort it before updating")
+                ? Translation.tr("A manual end-4 merge is pending — finish it with `setup upstream update --finish` or drop it with `--abort`")
                 : Translation.tr("Unsaved edits in the clone — Update commits them first")
         }
 
@@ -543,7 +543,7 @@ ContentPage {
         StyledText {
             Layout.fillWidth: true
             Layout.topMargin: 4
-            text: Translation.tr("If end-4 changed a file you also customized, the merge is aborted and nothing changes; the clashing files are listed below so you can merge them by hand.")
+            text: Translation.tr("If end-4 changed a file you also customized, nothing is applied and the clashing files are listed below. If anything breaks after merging (Hyprland config errors, the bar failing to load, the runtime build failing), everything is rolled back to the previous version.")
             font.pixelSize: Appearance.font.pixelSize.smaller
             color: Appearance.colors.colSubtext
             wrapMode: Text.WordWrap
@@ -584,7 +584,7 @@ ContentPage {
             StyledText {
                 Layout.fillWidth: true
                 Layout.topMargin: 4
-                text: Translation.tr("To merge by hand: run `setup upstream update` in the repo, fix the conflict markers, `git merge --continue` in the clone, then `setup upstream export`.")
+                text: Translation.tr("To merge by hand: run `setup upstream update` in the repo; it leaves the merge in a separate copy (upstream-merge) so the session keeps working. Fix the markers there, `git merge --continue`, then `setup upstream update --finish` and `setup upstream export`.")
                 font.pixelSize: Appearance.font.pixelSize.smaller
                 color: Appearance.colors.colSubtext
                 wrapMode: Text.WordWrap

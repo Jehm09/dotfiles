@@ -68,6 +68,9 @@ SUBMODULE_PATH="dots/.config/quickshell/ii/modules/common/widgets/shapes"
 
 BASE_BRANCH="base"
 MINE_BRANCH="mine"
+# Where a conflicted update waits to be resolved, away from the live clone.
+MERGE_DIR="${CACHE_DIR}-merge"
+MERGE_BRANCH="mine-merge"
 
 # ------------------------------------------------------------------
 # Lock file
@@ -380,12 +383,14 @@ cmd_sync() {
     info "Fetching upstream"
     git -C "$CACHE_DIR" fetch -q origin
     _apply_overlay
+    _reload_hyprland
     success "Upstream tree ready at $CACHE_DIR"
 }
 
 cmd_apply() {
     _require_clone
     _apply_overlay
+    _reload_hyprland
 }
 
 cmd_update() {
@@ -393,11 +398,19 @@ cmd_update() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --to) target="$2"; shift 2 ;;
+            --finish) _require_clone; _merge_finish; return ;;
+            --abort)  _require_clone; _merge_discard; success "Pending merge dropped"; return ;;
             *) error "Unknown option: $1"; exit 1 ;;
         esac
     done
 
     _require_clone
+    if [[ -d "$MERGE_DIR" ]]; then
+        error "A conflicted merge is waiting in $MERGE_DIR."
+        error "Finish it with 'setup upstream update --finish' or drop it with 'setup upstream update --abort'."
+        exit 1
+    fi
+
     info "Fetching upstream"
     git -C "$CACHE_DIR" fetch -q origin
 
@@ -412,24 +425,84 @@ cmd_update() {
     git -C "$CACHE_DIR" rev-parse --verify "$target^{commit}" \
         >"$CACHE_DIR/$_ANCHOR_FILE_REL"
 
+    # Dry run first: the live tree only gets a merge that is known to be clean.
     info "Merging $target into $MINE_BRANCH"
-    if git -C "$CACHE_DIR" -c user.name=setup -c user.email=setup@localhost \
-        merge --no-edit "$target"; then
-        git -C "$CACHE_DIR" submodule update --init --recursive -q
-        success "Merged cleanly. Now run: setup upstream export"
-        _warn_if_pin_stale
-    else
-        echo
-        warn "Merge conflicts in:"
-        git -C "$CACHE_DIR" diff --name-only --diff-filter=U | sed 's/^/      /'
-        echo
-        info "Resolve them in $CACHE_DIR, then:"
-        info "  git -C $CACHE_DIR add <files> && git -C $CACHE_DIR merge --continue"
-        info "  setup upstream export"
-        info "Or give up on this update with:"
-        info "  git -C $CACHE_DIR merge --abort"
-        return 1
+    local rc=0 out
+    out="$(git -C "$CACHE_DIR" merge-tree --write-tree --name-only --no-messages "$MINE_BRANCH" "$target")" || rc=$?
+    case "$rc" in
+        0) ;;
+        1) _merge_in_worktree "$target" "$(tail -n +2 <<<"$out" | sort -u)"; return 2 ;;
+        *) error "git merge-tree failed (exit $rc)"; exit "$rc" ;;
+    esac
+
+    git -C "$CACHE_DIR" -c user.name=setup -c user.email=setup@localhost \
+        merge -q --no-edit "$target"
+    git -C "$CACHE_DIR" submodule update --init --recursive -q
+    _reload_hyprland
+    success "Merged cleanly. Now run: setup upstream export"
+    _warn_if_pin_stale
+}
+
+# ~/.config reads the clone live: conflict markers there (or git rewriting files
+# mid-merge) leave Hyprland and the bar half-loaded. Conflicts are resolved in a
+# separate worktree and only reach the clone once they are a finished commit.
+_merge_in_worktree() {   # _merge_in_worktree <target> <conflicted files>
+    local target="$1" files="$2"
+    git -C "$CACHE_DIR" worktree add -q -B "$MERGE_BRANCH" "$MERGE_DIR" "$MINE_BRANCH"
+    git -C "$MERGE_DIR" -c user.name=setup -c user.email=setup@localhost \
+        merge -q --no-edit "$target" &>/dev/null || true
+
+    echo
+    warn "Merge conflicts in:"
+    sed 's/^/      /' <<<"$files"
+    echo
+    info "Your session is untouched — the conflicted merge lives in $MERGE_DIR"
+    info "Fix the markers there, then:"
+    info "  git -C $MERGE_DIR add <files> && git -C $MERGE_DIR merge --continue"
+    info "  setup upstream update --finish && setup upstream export"
+    info "Or drop it with:  setup upstream update --abort"
+}
+
+_merge_finish() {
+    [[ -d "$MERGE_DIR" ]] || { error "No pending merge in $MERGE_DIR."; exit 1; }
+    if git -C "$MERGE_DIR" rev-parse -q --verify MERGE_HEAD >/dev/null; then
+        error "The merge in $MERGE_DIR is not committed yet:"
+        error "  git -C $MERGE_DIR add <files> && git -C $MERGE_DIR merge --continue"
+        exit 1
     fi
+    local changed leftover
+    changed="$(git -C "$CACHE_DIR" diff --name-only "$MINE_BRANCH" "$MERGE_BRANCH")"
+    if [[ -n "$changed" ]]; then
+        leftover="$(xargs -d '\n' git -C "$CACHE_DIR" grep -l -E '^(<<<<<<<|>>>>>>>) ' "$MERGE_BRANCH" -- <<<"$changed" || true)"
+        if [[ -n "$leftover" ]]; then
+            error "Conflict markers are still committed in:"
+            sed 's/^/      /' <<<"$leftover" >&2
+            exit 1
+        fi
+    fi
+
+    git -C "$CACHE_DIR" checkout -q "$MINE_BRANCH"
+    git -C "$CACHE_DIR" merge -q --ff-only "$MERGE_BRANCH" \
+        || { error "$MINE_BRANCH moved since the merge started — drop it with --abort and update again."; exit 1; }
+    _merge_discard
+    git -C "$CACHE_DIR" submodule update --init --recursive -q
+    _reload_hyprland
+    success "Merge applied. Now run: setup upstream export"
+    _warn_if_pin_stale
+}
+
+_merge_discard() {
+    [[ -d "$MERGE_DIR" ]] && git -C "$CACHE_DIR" worktree remove --force "$MERGE_DIR"
+    git -C "$CACHE_DIR" worktree prune
+    git -C "$CACHE_DIR" branch -q -D "$MERGE_BRANCH" 2>/dev/null || true
+}
+
+_reload_hyprland() {
+    local errors
+    errors="$(hypr_reload_errors)"
+    [[ -z "$errors" ]] && return 0
+    warn "Hyprland reports config errors:"
+    sed 's/^/      /' <<<"$errors"
 }
 
 # Shown after an update and after an export: pulling new upstream code can move
@@ -661,6 +734,9 @@ cmd_status() {
         warn "Clone has uncommitted edits — run 'setup upstream export'"
         git -C "$CACHE_DIR" status --short | sed 's/^/      /'
     fi
+    if [[ -d "$MERGE_DIR" ]]; then
+        warn "A conflicted update waits in $MERGE_DIR — 'update --finish' or 'update --abort'"
+    fi
 
     if command -v pacman &>/dev/null; then
         local pinned
@@ -695,7 +771,9 @@ Usage: setup upstream <subcommand>
     sync              Clone/fetch upstream, check out the locked commit and
                       rebuild the working tree from the overlay
     apply             Rebuild the working tree only (after editing patches)
-    update [--to REF] Fetch and merge upstream code; stops on conflicts
+    update [--to REF] Fetch and merge upstream code. On conflicts the live clone
+                      is left alone and the merge waits in <clone>-merge;
+                      resolve it there, then 'update --finish' (or '--abort')
     export            Regenerate overlay/ and upstream.lock from the clone
     deps [--force]    Install quickshell at the commit upstream pins (needs sudo).
                       Reuses a cached build when one is newer than qt6-base;
@@ -714,7 +792,8 @@ Two things make the runtime stale, and both are reported the same way:
 
 Typical update:
     setup upstream update
-    # resolve conflicts if any, then:
+    # on conflicts: fix them in <clone>-merge, 'git merge --continue' there, then
+    setup upstream update --finish
     setup upstream export
     git add overlay && git commit
     setup upstream deps      # only if update or status asked for it

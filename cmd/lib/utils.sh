@@ -235,3 +235,17 @@ prevent_root() {
         exit 1
     fi
 }
+
+# ------------------------------------------------------------------
+# Hyprland health
+# git rewrites files by unlink + create, and Hyprland's autoreload can catch one
+# missing: everything required after it (keybinds, rules, custom/*) stays
+# unloaded until the next reload, even though the file is back on disk.
+# ------------------------------------------------------------------
+# Reloads Hyprland and prints its config errors; empty = healthy. No-op outside a session.
+hypr_reload_errors() {
+    command -v hyprctl &>/dev/null && [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || return 0
+    hyprctl reload >/dev/null 2>&1 || true
+    sleep 1
+    hyprctl configerrors 2>/dev/null | sed '/^[[:space:]]*$/d' || true
+}

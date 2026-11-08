@@ -9,9 +9,14 @@
 #   setup update shell --status   JSON snapshot for the settings page. Changes
 #                                 nothing beyond a `git fetch` in the clone.
 #
-# A merge conflict is aborted on the spot. ~/.config/hypr and quickshell read
-# the clone live, so conflict markers left in it break the running session; the
-# clashing files are reported instead and everything stays as it was.
+# ~/.config/hypr and quickshell read the clone live, so the run never leaves it
+# broken:
+#   - a conflict is detected before touching the clone (merge-tree dry run); the
+#     clashing files are reported and nothing changes.
+#   - after a clean merge Hyprland is reloaded and checked, and the bar too. Any
+#     failure from the merge until before the push (config errors, the bar dying,
+#     export/deps failing) rolls the clone, the overlay commits and the runtime
+#     back to where they were, and reloads the session on that version.
 #
 # Progress goes to $STATE_FILE (read by the settings page) and the full output
 # to a log under $STATE_DIR/logs.
@@ -34,12 +39,20 @@ RUNTIME_PKG="illogical-impulse-quickshell-git"
 # Settings rewrites it on every change; Joe wants it committed whatever its state.
 SETTINGS_JSON="dots/hyprland/.config/settings/quickshell/config.json"
 
+# Same as MERGE_DIR in upstream.sh: a conflicted manual update waiting to be resolved.
+MERGE_DIR="${CLONE}-merge"
+BAR_CONFIG="quickshell/ii/shell.qml"
+
 STATE_FILE="$STATE_DIR/shell-update.json"
 RUN_LOCK="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/dotfiles-shell-update.lock"
 
 _started=""
 _log=""
 _step=""
+# Rollback points, set right before the merge and cleared before the push.
+_rb_clone=""
+_rb_dotfiles=""
+_rb_runtime=false
 
 # ------------------------------------------------------------------
 # Small readers
@@ -74,9 +87,12 @@ _phase() {
 # A known failure: record why, tell the user, stop.
 _fail_msg() {
     trap - ERR
-    error "$1"
-    _state error "$1"
-    run_notify "end-4 update failed" "$1"
+    local msg="$1"
+    error "$msg"
+    _rollback && msg+=" Rolled back to the previous version." \
+        || msg+=" ROLLBACK FAILED — see the log: $_log"
+    _state error "$msg"
+    run_notify "end-4 update failed" "$msg"
     exit 1
 }
 
@@ -84,11 +100,88 @@ _fail_msg() {
 _fail_unexpected() {
     local rc=$?
     trap - ERR
-    local msg="Failed during '$_step' (exit $rc). See the log: $_log"
+    local msg="Failed during '$_step' (exit $rc)."
     error "$msg"
+    _rollback && msg+=" Rolled back to the previous version." \
+        || msg+=" ROLLBACK FAILED."
+    msg+=" See the log: $_log"
     _state error "$msg"
     run_notify "end-4 update failed" "$msg"
     exit "$rc"
+}
+
+# ------------------------------------------------------------------
+# Rollback — back to the last version that worked
+# ------------------------------------------------------------------
+# Returns 0 when there was nothing to undo or the undo worked. Uses --keep so
+# files git does not own (per-machine, skip-worktree) are never clobbered.
+_rollback() {
+    [[ -n "$_rb_clone" ]] || return 0
+    local ok=0
+    set +e
+    _step="Rollback"
+    step "Rolling back"
+    _state running "Rolling back"
+
+    git -C "$CLONE" rev-parse -q --verify MERGE_HEAD >/dev/null && git -C "$CLONE" merge --abort
+    if git -C "$CLONE" reset -q --keep "$_rb_clone"; then
+        git -C "$CLONE" submodule update --init --recursive -q
+        success "Clone back at ${_rb_clone:0:8}"
+    else
+        error "Could not reset the clone to $_rb_clone — try: git -C $CLONE reset --keep $_rb_clone"
+        ok=1
+    fi
+
+    # Only the commits this run made, and they were never pushed (push comes last).
+    if [[ "$(git -C "$DOTFILES_DIR" rev-parse HEAD)" != "$_rb_dotfiles" ]]; then
+        if git -C "$DOTFILES_DIR" reset -q --keep "$_rb_dotfiles"; then
+            success "Dropped this run's overlay commit"
+        else
+            error "Could not drop the overlay commit — try: git -C $DOTFILES_DIR reset --keep $_rb_dotfiles"
+            ok=1
+        fi
+    fi
+
+    # The clone is back on the old pin: reinstall that build (cached, no compile).
+    if [[ "$_rb_runtime" == true ]]; then
+        "$SETUP" upstream deps || { error "Could not reinstall the previous quickshell — run: setup upstream deps"; ok=1; }
+    fi
+
+    local errors
+    errors="$(hypr_reload_errors)"
+    [[ -z "$errors" ]] || { error "Hyprland still reports errors: $errors"; ok=1; }
+    if [[ "$_bar_was_running" == true ]] && { [[ "$_rb_runtime" == true ]] || ! _bar_running; }; then
+        run_restart_bar
+    fi
+
+    _rb_clone=""
+    set -e
+    return "$ok"
+}
+
+# ------------------------------------------------------------------
+# Session health
+# ------------------------------------------------------------------
+_bar_was_running=false
+_qs_log_mark=0
+
+_bar_running() { qs list --all 2>/dev/null | grep -q "$BAR_CONFIG"; }
+_bar_log()     { qs log -c ii 2>/dev/null || true; }
+
+# The bar hot-reloads on file changes and keeps the old generation when the new
+# QML fails, so it looks alive: the log is what says the new code is broken.
+_check_session() {
+    local errors
+    errors="$(hypr_reload_errors)"
+    [[ -z "$errors" ]] || _fail_msg "Hyprland reports config errors with the new end-4 code: ${errors%%$'\n'*}"
+
+    [[ "$_bar_was_running" == true ]] || { success "Hyprland config loads cleanly"; return 0; }
+    sleep 3
+    _bar_running || _fail_msg "The bar stopped running with the new end-4 code."
+    if _bar_log | tail -n +"$((_qs_log_mark + 1))" | grep -q "Failed to load configuration"; then
+        _fail_msg "The bar failed to load the new end-4 code (see: qs log -c ii)."
+    fi
+    success "Hyprland config loads cleanly and the bar is up"
 }
 
 # ------------------------------------------------------------------
@@ -99,6 +192,9 @@ _preflight() {
         || _fail_msg "No upstream clone at $CLONE — run 'setup upstream sync' first."
     if [[ -f "$CLONE/.git/MERGE_HEAD" ]]; then
         _fail_msg "The clone has a merge in progress. Finish it or run: git -C $CLONE merge --abort"
+    fi
+    if [[ -d "$MERGE_DIR" ]]; then
+        _fail_msg "A manual end-4 merge is pending in $MERGE_DIR. Finish it with 'setup upstream update --finish' or drop it with '--abort'."
     fi
 
     local branch gitdir
@@ -132,17 +228,21 @@ _commit_paths() {   # _commit_paths <message> <path...>
     success "Committed: $message"
 }
 
+# upstream update left the conflicted merge in $MERGE_DIR, never in the live clone.
+# Drop it: this run stays all-or-nothing, and a manual `upstream update` redoes it.
 _abort_conflict() {
     local files=()
-    mapfile -t files < <(git -C "$CLONE" diff --name-only --diff-filter=U)
-    git -C "$CLONE" merge --abort
+    mapfile -t files < <(git -C "$MERGE_DIR" diff --name-only --diff-filter=U 2>/dev/null)
+    "$SETUP" upstream update --abort >/dev/null
+    _rb_clone=""
 
-    local msg="end-4 changed ${#files[@]} file(s) you also patch. The merge was aborted; nothing changed."
+    local msg="end-4 changed ${#files[@]} file(s) you also patch. Nothing was applied; your session is untouched."
     echo
     warn "$msg"
     printf '      %s\n' "${files[@]}"
-    info "To merge by hand:  $SETUP upstream update   (fix the markers, then"
-    info "git -C $CLONE add <files> && git -C $CLONE merge --continue, then $SETUP upstream export)"
+    info "To merge by hand (in a separate copy, the session keeps working):"
+    info "  $SETUP upstream update      fix the markers in $MERGE_DIR, git merge --continue there, then"
+    info "  $SETUP upstream update --finish && $SETUP upstream export"
     _state conflict "$msg" "${files[@]}"
     run_notify "end-4 update: conflicts" "$msg"
     exit 2
@@ -180,10 +280,24 @@ cmd_run() {
     _commit_paths "chore(settings): guardar config de quickshell" "$SETTINGS_JSON"
 
     _phase "Merge end-4"
-    if ! "$SETUP" upstream update; then
-        [[ -f "$CLONE/.git/MERGE_HEAD" ]] && _abort_conflict
-        _fail_msg "Merging end-4 failed, and not because of a conflict. See the log: $_log"
-    fi
+    # Baseline: a reload clears stale errors; real ones are not this update's doing.
+    local errors
+    errors="$(hypr_reload_errors)"
+    [[ -z "$errors" ]] || _fail_msg "Hyprland already reports config errors before updating — fix them first: ${errors%%$'\n'*}"
+    _bar_running && _bar_was_running=true
+    _qs_log_mark="$(_bar_log | wc -l)"
+    _rb_clone="$(git -C "$CLONE" rev-parse HEAD)"
+    _rb_dotfiles="$(git -C "$DOTFILES_DIR" rev-parse HEAD)"
+    local rc=0
+    "$SETUP" upstream update || rc=$?
+    case "$rc" in
+        0) ;;
+        2) _abort_conflict ;;
+        *) _fail_msg "Merging end-4 failed, and not because of a conflict. See the log: $_log" ;;
+    esac
+
+    _phase "Check session"
+    _check_session
 
     _phase "Export overlay"
     "$SETUP" upstream export
@@ -195,13 +309,20 @@ cmd_run() {
     _phase "Runtime (quickshell)"
     local before after
     before="$(_installed_date)"
+    _rb_runtime=true   # deps may have swapped the package before failing
     "$SETUP" upstream deps
     after="$(_installed_date)"
+    [[ "$before" != "$after" ]] || _rb_runtime=false
 
     if [[ "$before" != "$after" ]]; then
         _phase "Restart bar"
+        _qs_log_mark=0
         run_restart_bar
+        _check_session
     fi
+
+    # From here on the update is good; a failed push keeps it and says so.
+    _rb_clone=""
 
     _phase "Push"
     _push
@@ -229,7 +350,7 @@ cmd_status() {
     # The pin in end-4's latest code, which Update would bring in.
     upstream_pin="$(git -C "$CLONE" show "origin/main:$PKGBUILD_REL" 2>/dev/null \
         | awk -F"'" '/^_commit=/ {print $2; exit}' || true)"
-    [[ -f "$CLONE/.git/MERGE_HEAD" ]] && merging=true
+    [[ -f "$CLONE/.git/MERGE_HEAD" || -d "$MERGE_DIR" ]] && merging=true
     [[ -n "$(git -C "$CLONE" status --porcelain 2>/dev/null)" ]] && dirty=true
     run_quickshell_loads || abi=false
 
@@ -248,6 +369,9 @@ cmd_status() {
                     elif $pinned != $installedPin then "stale"
                     else "ok" end)}'
 }
+
+# Sourced (tests) = functions only.
+[[ "${BASH_SOURCE[0]}" == "$0" ]] || return 0
 
 case "${1:-}" in
     --status) cmd_status ;;
