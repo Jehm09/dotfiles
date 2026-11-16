@@ -1,0 +1,7 @@
+diff --git a/dots/.config/hypr/custom/keybinds.lua b/dots/.config/hypr/custom/keybinds.lua
+index e853b96d..79b44c54 100644
+--- a/dots/.config/hypr/custom/keybinds.lua
++++ b/dots/.config/hypr/custom/keybinds.lua
+@@ -1 +1,2 @@
+ hl.bind("CTRL+SUPER+ALT+Slash", hl.dsp.exec_cmd("xdg-open ~/.config/hypr/custom/keybinds.lua"), {description = "Edit user keybinds"} )
++hl.bind("SUPER + SHIFT + G", hl.dsp.exec_cmd("~/.config/hypr/custom/scripts/mangohud-toggle.sh"), { description = "MangoHud: mostrar/ocultar overlay" })

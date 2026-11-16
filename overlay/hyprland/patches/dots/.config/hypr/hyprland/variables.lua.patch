@@ -1,5 +1,5 @@
 diff --git a/dots/.config/hypr/hyprland/variables.lua b/dots/.config/hypr/hyprland/variables.lua
-index 1deaaac5..05962108 100644
+index 1deaaac5..b991e168 100644
 --- a/dots/.config/hypr/hyprland/variables.lua
 +++ b/dots/.config/hypr/hyprland/variables.lua
 @@ -6,14 +6,16 @@ hl.env("qsConfig", "ii")
@@ -10,10 +10,11 @@ index 1deaaac5..05962108 100644
 +terminal = "~/.config/hypr/hyprland/scripts/launch_first_available.sh 'kitty -1' 'foot' \'alacritty' 'wezterm' 'konsole' 'kgx' 'uxterm' 'xterm'"
  fileManager = "~/.config/hypr/hyprland/scripts/launch_first_available.sh 'dolphin' 'nautilus' 'nemo' 'thunar' 'kitty -1 fish -c yazi'"
 -browser = "~/.config/hypr/hyprland/scripts/launch_first_available.sh 'google-chrome-stable' 'zen-browser' 'firefox' 'brave' 'chromium' 'microsoft-edge-stable' 'opera' 'librewolf'"
+-codeEditor = "~/.config/hypr/hyprland/scripts/launch_first_available.sh 'windsurf' 'antigravity' 'code' 'codium' 'cursor' 'zed' 'zedit' 'zeditor' 'kate' 'gnome-text-editor' 'emacs' 'command -v nvim && kitty -1 nvim' 'command -v micro && kitty -1 micro'"
 +-- Browser order/flags live in launch_browser.sh (single source of truth).
 +browser = "~/.config/hypr/hyprland/scripts/launch_browser.sh"
 +browserIncognito = browser .. " --incognito"
- codeEditor = "~/.config/hypr/hyprland/scripts/launch_first_available.sh 'windsurf' 'antigravity' 'code' 'codium' 'cursor' 'zed' 'zedit' 'zeditor' 'kate' 'gnome-text-editor' 'emacs' 'command -v nvim && kitty -1 nvim' 'command -v micro && kitty -1 micro'"
++codeEditor = "~/.config/hypr/hyprland/scripts/launch_first_available.sh 'zeditor' 'zed' 'zedit' 'windsurf' 'antigravity' 'code' 'codium' 'cursor' 'kate' 'gnome-text-editor' 'emacs' 'command -v nvim && kitty -1 nvim' 'command -v micro && kitty -1 micro'"
  officeSoftware = "~/.config/hypr/hyprland/scripts/launch_first_available.sh 'wps' 'onlyoffice-desktopeditors' 'libreoffice'"
  textEditor = "~/.config/hypr/hyprland/scripts/launch_first_available.sh 'kate' 'gnome-text-editor' 'emacs'"
  volumeMixer = "~/.config/hypr/hyprland/scripts/launch_first_available.sh 'pavucontrol-qt' 'pavucontrol'"
