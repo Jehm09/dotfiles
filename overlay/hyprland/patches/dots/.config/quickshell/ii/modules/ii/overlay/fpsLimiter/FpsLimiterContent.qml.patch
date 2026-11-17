@@ -1,0 +1,151 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/overlay/fpsLimiter/FpsLimiterContent.qml b/dots/.config/quickshell/ii/modules/ii/overlay/fpsLimiter/FpsLimiterContent.qml
+index def4a6c6..7ae49ce8 100644
+--- a/dots/.config/quickshell/ii/modules/ii/overlay/fpsLimiter/FpsLimiterContent.qml
++++ b/dots/.config/quickshell/ii/modules/ii/overlay/fpsLimiter/FpsLimiterContent.qml
+@@ -5,6 +5,7 @@ import QtQuick.Controls
+ import Quickshell
+ import Quickshell.Io
+ import qs.modules.common
++import qs.modules.common.functions
+ import qs.modules.common.widgets
+ import qs.modules.ii.overlay
+ 
+@@ -26,70 +27,92 @@ OverlayBackground {
+         }
+     }
+ 
++    // fps_limit del config global: lo que muestra el widget, se mantiene al día si otro lo edita
++    property string currentLimit: ""
++    readonly property var limitLine: /^[ \t]*fps_limit[ \t]*=[ \t]*(.*)$/m
++
++    FileView {
++        id: mangoConfig
++        path: FileUtils.trimFileProtocol(`${Directories.config}/MangoHud/MangoHud.conf`)
++        watchChanges: true
++        // Sin escritura atómica: escribe en el mismo inodo, así no reemplaza el symlink al repo
++        // ni pierde el watch de inotify con el que los juegos abiertos recargan el archivo.
++        atomicWrites: false
++        // text() espera la lectura: con el archivo aún sin cargar reescribiría el config vacío
++        blockLoading: true
++        onFileChanged: reload()
++        onLoaded: {
++            const match = text().match(root.limitLine);
++            root.currentLimit = match ? match[1].trim() : "";
++        }
++        onLoadFailed: root.currentLimit = ""
++    }
++
++    function limitLabel(limit) {
++        if (limit === "" || limit === "0") return Translation.tr("Unlimited");
++        return limit.split(",").map(v => v.trim()).join(" / ") + " FPS";
++    }
++
+     function applyLimit() {
+-        var fpsValue = parseInt(fpsField.text);
+-        if (isNaN(fpsValue) || fpsValue < 0) {
++        const fpsValue = parseInt(fpsField.text);
++        if (isNaN(fpsValue) || fpsValue < 0 || String(fpsValue) !== fpsField.text.trim()) {
+             root.currentState = FpsLimiterContent.State.Error;
+             iconResetTimer.restart();
+             fpsField.text = "";
+             return;
+         }
+ 
+-        var cfgPaths = [
+-            "~/.config/MangoHud/MangoHud.conf",
+-        ]; // MangoHud config files
+-
+-        var updateCommands = cfgPaths.map(path => {
+-            return "if grep -q '^fps_limit=' " + path + "; " +
+-            "then sed -i 's/^fps_limit=.*/fps_limit=" + fpsValue + "/' " + path + "; " +
+-            "else echo 'fps_limit=" + fpsValue + "' >> " + path + "; fi";
+-        }).join("; ");
+-
+-        var cmd = updateCommands + "; pkill -SIGUSR2 mangohud";
+-
+-        fpsSetter.command = ["bash", "-c", cmd];
+-        fpsSetter.startDetached();
++        const content = mangoConfig.text();
++        const line = `fps_limit=${fpsValue}`;
++        mangoConfig.setText(root.limitLine.test(content)
++            ? content.replace(root.limitLine, line)
++            : `${content.replace(/\n*$/, "\n")}${line}\n`);
++        root.currentLimit = String(fpsValue);
+ 
+         root.currentState = FpsLimiterContent.State.Success;
+         iconResetTimer.restart();
+-
+-        // Clear the field after applying
+         fpsField.text = "";
+     }
+ 
+-    Process {
+-        id: fpsSetter
+-    }
+-
+-    RowLayout {
++    ColumnLayout {
+         id: content
+         anchors.centerIn: parent
+-        spacing: 4
+-
+-        ToolbarTextField {
+-            id: fpsField
+-            Layout.fillWidth: true
+-            Layout.preferredWidth: 200
+-            placeholderText: root.currentState === FpsLimiterContent.State.Error ? Translation.tr("Enter a valid number") : Translation.tr("Set FPS limit")
+-            inputMethodHints: Qt.ImhDigitsOnly
+-            focus: true
+-
+-            onAccepted: {
+-                root.applyLimit();
+-            }
++        spacing: 8
++
++        StyledText {
++            Layout.leftMargin: 4
++            text: Translation.tr("Global limit: %1").arg(root.limitLabel(root.currentLimit))
++            color: Appearance.colors.colSubtext
+         }
+ 
+-        IconToolbarButton {
+-            id: applyButton
+-            text: switch (root.currentState) {
+-                case FpsLimiterContent.State.Error: return "close";
+-                case FpsLimiterContent.State.Success: return "check";
+-                case FpsLimiterContent.State.Normal:
+-                default: return "save";
++        RowLayout {
++            spacing: 4
++
++            ToolbarTextField {
++                id: fpsField
++                Layout.fillWidth: true
++                Layout.preferredWidth: 200
++                placeholderText: root.currentState === FpsLimiterContent.State.Error ? Translation.tr("Enter a valid number") : Translation.tr("New limit (0 = unlimited)")
++                inputMethodHints: Qt.ImhDigitsOnly
++                focus: true
++
++                onAccepted: {
++                    root.applyLimit();
++                }
+             }
+-            enabled: root.currentState === FpsLimiterContent.State.Normal && fpsField.text.length > 0
+-            onClicked: {
+-                root.applyLimit();
++
++            IconToolbarButton {
++                id: applyButton
++                text: switch (root.currentState) {
++                    case FpsLimiterContent.State.Error: return "close";
++                    case FpsLimiterContent.State.Success: return "check";
++                    case FpsLimiterContent.State.Normal:
++                    default: return "save";
++                }
++                enabled: root.currentState === FpsLimiterContent.State.Normal && fpsField.text.length > 0
++                onClicked: {
++                    root.applyLimit();
++                }
+             }
+         }
+     }

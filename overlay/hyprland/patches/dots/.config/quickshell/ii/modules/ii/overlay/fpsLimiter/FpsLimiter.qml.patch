@@ -1,0 +1,13 @@
+diff --git a/dots/.config/quickshell/ii/modules/ii/overlay/fpsLimiter/FpsLimiter.qml b/dots/.config/quickshell/ii/modules/ii/overlay/fpsLimiter/FpsLimiter.qml
+index 857a423d..9d2334d0 100644
+--- a/dots/.config/quickshell/ii/modules/ii/overlay/fpsLimiter/FpsLimiter.qml
++++ b/dots/.config/quickshell/ii/modules/ii/overlay/fpsLimiter/FpsLimiter.qml
+@@ -7,7 +7,7 @@ StyledOverlayWidget {
+     id: root
+     title: "MangoHud FPS"
+     minimumWidth: 275
+-    minimumHeight: 100
++    minimumHeight: 130
+     contentItem: FpsLimiterContent {
+         radius: root.contentRadius
+     }
