@@ -18,15 +18,15 @@
 #
 # Usage:
 #   setup update check                     What is stale, changes nothing
-#   setup update all --hyprland            The whole chain, in order
+#   setup update all                       The whole chain, in order
 #   setup update system [--unattended|--background] [--then poweroff|reboot|windows] [--status]
 #                                          Repos + AUR only, logged, rebuilds
 #                                          quickshell if Qt broke it
 #                                          (cmd/lib/system-update.sh)
 #   setup update end4                      Merge upstream and export the overlay
 #   setup update runtime [--force]         Rebuild/reinstall pinned quickshell
-#   setup update pkgs --hyprland           Reinstall from packages/*.conf
-#   setup update dotfiles --hyprland       Re-link ~/.config
+#   setup update pkgs                      Reinstall from packages/*.conf
+#   setup update dotfiles                  Re-link ~/.config
 #   setup update shell [--status]          end4 + commit + runtime + push in one
 #                                          run (cmd/lib/shell-update.sh)
 
@@ -38,19 +38,9 @@ source "$DOTFILES_DIR/cmd/lib/utils.sh"
 
 SETUP="$DOTFILES_DIR/setup"
 
-# Set by --hyprland/--kde. The steps that read packages/*.conf or link ~/.config
-# need it; the rest do not, so it is validated per mode rather than up front.
-_desktop=""
 _passthru=()
 _shell_args=()
 _system_args=()
-
-_require_desktop() {
-    [[ -n "$_desktop" ]] && return 0
-    error "This step needs a desktop: pass --hyprland or --kde."
-    error "See: setup update --help"
-    exit 1
-}
 
 # ------------------------------------------------------------------
 # check — read-only dashboard
@@ -116,9 +106,8 @@ cmd_runtime() {
 }
 
 cmd_pkgs() {
-    _require_desktop
     step "4. Packages from this repo"
-    "$SETUP" post --pkgs "--$_desktop"
+    "$SETUP" post --pkgs
 }
 
 cmd_shell() {
@@ -126,16 +115,14 @@ cmd_shell() {
 }
 
 cmd_dotfiles() {
-    _require_desktop
     step "5. Dotfile symlinks"
-    "$SETUP" post --only dotfiles "--$_desktop"
+    "$SETUP" post --only dotfiles
 }
 
 # ------------------------------------------------------------------
 # all — the whole chain, in the order the header explains
 # ------------------------------------------------------------------
 cmd_all() {
-    _require_desktop
     cmd_system
     cmd_end4
     cmd_runtime
@@ -150,12 +137,12 @@ cmd_all() {
 _usage() {
     cat <<EOF
 
-Usage: setup update <subcommand> [--hyprland|--kde]
+Usage: setup update <subcommand>
 
 Routine maintenance. 'post' builds the machine; this keeps it current.
 
     check             What is stale — changes nothing
-    all               Everything below, in order (needs a desktop)
+    all               Everything below, in order
     system            Official repos + AUR, logged for the quickshell Update page.
                       --unattended answers nothing (fails instead of asking),
                       --background is that without a terminal (the quickshell
@@ -164,8 +151,8 @@ Routine maintenance. 'post' builds the machine; this keeps it current.
                       --status prints a JSON snapshot and changes nothing
     end4              Merge end-4's changes and export the overlay
     runtime [--force] Reinstall the quickshell build end-4 pins
-    pkgs              Reinstall from packages/*.conf (needs a desktop)
-    dotfiles          Re-link ~/.config (needs a desktop)
+    pkgs              Reinstall from packages/*.conf
+    dotfiles          Re-link ~/.config
     shell [--status]  end4 + commit overlay/ + runtime + push in one run, aborting
                       on merge conflicts (what the quickshell Update page runs).
                       --status prints a JSON snapshot and changes nothing
@@ -185,14 +172,13 @@ EOF
 }
 
 # ------------------------------------------------------------------
-# Flags. The desktop and --force can appear in any position, so they are
+# Flags. --force and the rest can appear in any position, so they are
 # stripped first and the remaining word is the subcommand.
 # ------------------------------------------------------------------
 _mode=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --hyprland) _desktop="hyprland" ;;
-        --kde)      _desktop="kde"      ;;
+        --hyprland) ;;  # Hyprland es el único escritorio; se acepta por compatibilidad
         --force)    _passthru+=("--force") ;;
         --status)   _shell_args+=("--status"); _system_args+=("--status") ;;
         --unattended) _system_args+=("--unattended") ;;

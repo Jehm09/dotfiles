@@ -4,9 +4,9 @@
 # Two options, mutually exclusive — only one display manager may be enabled,
 # since /etc/systemd/system/display-manager.service is a single symlink:
 #
-#   sddm     Graphical Qt login with the astronaut theme. Themed, picks between
-#            the Hyprland and Plasma sessions, but its Wayland greeter runs
-#            under weston and is fussy about GPUs and multi-head layouts.
+#   sddm     Graphical Qt login with the astronaut theme. Themed, but its
+#            Wayland greeter runs under weston and is fussy about GPUs and
+#            multi-head layouts.
 #   greetd   Console greeter (sysc-greet, Hyprland variant). Lighter, runs
 #            under the same compositor as the session, no theming.
 #
@@ -63,7 +63,7 @@ HYPRLAND_GREETER_CONF="/etc/greetd/hyprland-greeter-config.lua"
 
 # SDDM draws no pointer at all unless told which theme to use — there is no
 # fallback, it is simply invisible. Matches what Hyprland sets in
-# hyprland/execs.lua and what KDE uses in kcminputrc, so the pointer does not
+# hyprland/execs.lua, so the pointer does not
 # change shape between the login screen and the session.
 CURSOR_THEME="Bibata-Modern-Classic"
 CURSOR_SIZE="24"

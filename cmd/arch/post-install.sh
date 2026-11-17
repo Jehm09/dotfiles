@@ -11,25 +11,20 @@
 #
 #   1   multilib   enable the [multilib] repo (Steam, 32-bit apps)
 #   2   aur        install yay / paru / both — steps 3+ install through it
-#   3   desktop    deps-hyprland + deps-quickshell, or deps-kde
-#   3b    plasma     KWallet PAM hook + the copy-managed dots/kde     [kde only]
-#   3c    quickshell pinned quickshell build + Python venv       [hyprland only]
+#   3   desktop    deps-hyprland + deps-quickshell, pinned quickshell build + Python venv
 #   4   apps       everything in apps.conf (official + AUR)
 #   5   greeter    SDDM + astronaut theme, or greetd + sysc-greet
 #   6   hooks      install packages/hooks/enabled/ to /etc/pacman.d/hooks
-#   7   dotfiles   symlink ~/.config — dots/common plus the desktop profile
+#   7   dotfiles   symlink ~/.config — dots/common + dots/hyprland
 #   8   shell      set fish as the login shell
 #   9   hwfix      Logitech mouse module blacklist + initramfs rebuild
 #
-# 3b and 3c are mutually exclusive: they follow the desktop choice, which is
-# required and has no default.
-#
 # Usage:
-#   setup post --hyprland                  Pick steps in a menu
-#   setup post --all --hyprland            Everything, no prompts
-#   setup post --only greeter --hyprland   One step
-#   setup post --skip apps,hwfix --kde     Everything but those
-#   setup post --help                      Full flag reference
+#   setup post                        Pick steps in a menu
+#   setup post --all                  Everything, no prompts
+#   setup post --only greeter         One step
+#   setup post --skip apps,hwfix      Everything but those
+#   setup post --help                 Full flag reference
 
 set -Eeuo pipefail
 
@@ -40,8 +35,7 @@ source "$REPO_ROOT/cmd/lib/utils.sh"
 
 prevent_root
 # sudo_keepalive is deliberately NOT called here: it would prompt for a password
-# before the flags are even parsed, so `--help` and the desktop validation could
-# not run without one. It is started further down, once we know work will happen.
+# before the flags are even parsed, so `--help` could not run without one. It is started further down, once we know work will happen.
 
 # ------------------------------------------------------------------
 # Steps
@@ -58,11 +52,11 @@ STEPS=(multilib aur desktop apps greeter hooks dotfiles shell hwfix)
 declare -A STEP_DESC=(
     [multilib]="1. base     [multilib] repo — Steam, 32-bit apps"
     [aur]="2. base     paru/yay — every step below installs through it"
-    [desktop]="3. desktop  graphical stack — Hyprland/Quickshell or Plasma"
+    [desktop]="3. desktop  graphical stack — Hyprland/Quickshell"
     [apps]="4. apps     browsers, editors, games — apps.conf"
     [greeter]="5. login    SDDM, or greetd + sysc-greet"
     [hooks]="6. system   pacman hooks from hooks/enabled/"
-    [dotfiles]="7. config   ~/.config — kitty, fish, fastfetch + desktop"
+    [dotfiles]="7. config   ~/.config — kitty, fish, fastfetch, hypr, quickshell"
     [shell]="8. config   fish as the login shell"
     [hwfix]="9. hardware Logitech mouse fix + initramfs"
 )
@@ -83,10 +77,6 @@ for _s in "${STEPS[@]}"; do declare "_do_${_s}=true"; done
 # yay by default: it builds faster and needs less setup than paru on a bare
 # system, which is the situation where this actually gets installed.
 _aur_helper="yay"         # yay | paru | both
-
-# Which desktop this machine gets. No default on purpose: the two profiles are
-# mutually exclusive and the packages, dotfiles and session all follow from it.
-_desktop=""
 
 # Which login screen. SDDM is the default; greetd + sysc-greet (Hyprland) is
 # the lighter alternative. See cmd/lib/greeter.sh.
@@ -119,8 +109,7 @@ _only() {  # keep just the named steps
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --all)       _flag_noninteractive=true ;;
-        --hyprland)  _desktop="hyprland" ;;
-        --kde)       _desktop="kde"      ;;
+        --hyprland)  ;;  # Hyprland es el único escritorio; se acepta por compatibilidad
         --greeter=*) _greeter="${1#*=}"
                      [[ "$_greeter" =~ ^(sddm|greetd)$ ]] || {
                          error "--greeter must be sddm or greetd"; exit 1; } ;;
@@ -139,14 +128,10 @@ while [[ $# -gt 0 ]]; do
 
         -h|--help)
             cat <<EOF
-Usage: setup post <--hyprland|--kde> [options]
+Usage: setup post [options]
 
 Everything except the initial Arch install, which is 'setup install' and only
 runs once from the live ISO. Run it whole or a step at a time.
-
-Desktop (required — pick one):
-    --hyprland          Hyprland + Quickshell
-    --kde               KDE Plasma
 
 Steps:
 $(for s in "${STEPS[@]}"; do printf '    %s\n' "$(_step_label "$s")"; done)
@@ -161,20 +146,19 @@ Options:
     -h, --help          Show this help
 
 Examples:
-    setup post --hyprland                 pick steps in a menu
-    setup post --all --hyprland           everything, no prompts
-    setup post --only greeter --hyprland  just the login screen
-    setup post --skip apps,hwfix --kde    everything but those two
-    setup post --only dotfiles --hyprland just the ~/.config symlinks
+    setup post                     pick steps in a menu
+    setup post --all               everything, no prompts
+    setup post --only greeter      just the login screen
+    setup post --skip apps,hwfix   everything but those two
+    setup post --only dotfiles     just the ~/.config symlinks
 
 To undo the dotfiles:
-    setup dotfiles <hyprland|kde> --unlink
+    setup dotfiles --unlink
 EOF
             exit 0
             ;;
         *)
-            # Without this a typo like --hyprlnad would be ignored silently and
-            # the run would stop later with a confusing "no desktop chosen".
+            # Without this a typo like --onyl would be ignored silently.
             error "Unknown option: $1"
             error "See: setup post --help"
             exit 1
@@ -191,16 +175,6 @@ done
 _have_helpers="$(_installed_helpers)"
 
 if [[ "$_flag_noninteractive" == false ]] && has_menu; then
-    if [[ -z "$_desktop" ]]; then
-        _desktop="$(menu_radiolist "Desktop" \
-"dots/common is linked either way: kitty, fish, fastfetch, yazi, mpv, starship —\n\
-the terminal and CLI side, identical on both desktops.\n\n\
-This choice is only about the GRAPHICAL side:" \
-            hyprland "Hyprland + Quickshell — bar, launcher, wallpaper, lock" on \
-            kde      "KDE Plasma 6 — full desktop environment"                off)" \
-            || { info "Cancelled."; exit 0; }
-    fi
-
     # The AUR step only makes sense as a choice when a helper already exists.
     # With none installed nothing below step 2 can run, so it is forced on and
     # the only question is which one to install.
@@ -234,7 +208,7 @@ skipped. Which do you want?" \
         _v="_do_${_s}"
         _items+=("$_s" "${STEP_DESC[$_s]}" "$([[ ${!_v} == true ]] && echo on || echo off)")
     done
-    _chosen="$(menu_checklist "Post-install — $_desktop, $_greeter" \
+    _chosen="$(menu_checklist "Post-install — hyprland, $_greeter" \
 "Space toggles · Tab to the buttons · Enter confirms\n\
 Listed in the order they run; each assumes the ones above it." \
         "${_items[@]}")" || { info "Cancelled."; exit 0; }
@@ -266,18 +240,8 @@ elif [[ "$_flag_noninteractive" == false && -t 0 ]]; then
     [[ "$_yn" =~ ^[Yy]$ ]] || { info "Cancelled."; exit 0; }
 fi
 
-# ------------------------------------------------------------------
-# The desktop choice drives packages, dotfiles and session config, so refuse to
-# run any of those steps without it rather than silently guessing one.
-# ------------------------------------------------------------------
-if [[ -z "$_desktop" ]] \
-   && { [[ $_do_desktop == true ]] || [[ $_do_dotfiles == true ]]; }; then
-    error "No desktop chosen. Use --hyprland or --kde."
-    exit 1
-fi
-
 echo
-info "Desktop: ${_desktop:-none}   Login screen: $_greeter"
+info "Login screen: $_greeter"
 info "Steps: $(for s in "${STEPS[@]}"; do v="_do_$s"; [[ ${!v} == true ]] && printf '%s ' "$s"; done)"
 echo
 
@@ -336,15 +300,12 @@ _find_aur_helper() {
 }
 
 # ------------------------------------------------------------------
-# 3. Desktop packages — whichever desktop was chosen
+# 3. Desktop packages — Hyprland + Quickshell
 # ------------------------------------------------------------------
 if [[ $_do_desktop == true ]]; then
-    step "Desktop packages ($_desktop)"
+    step "Desktop packages (hyprland)"
 
-    case "$_desktop" in
-        hyprland) _pkg_files=(deps-hyprland.conf deps-quickshell.conf) ;;
-        kde)      _pkg_files=(deps-kde.conf)                           ;;
-    esac
+    _pkg_files=(deps-hyprland.conf deps-quickshell.conf)
 
     _helper="$(_find_aur_helper)"
     if [[ -z "$_helper" ]]; then
@@ -366,62 +327,10 @@ if [[ $_do_desktop == true ]]; then
 fi
 
 # ------------------------------------------------------------------
-# 3b. Plasma-specific session setup
-#     Runs only when KDE is the chosen desktop: the wallet PAM hook and the
-#     copy-managed dots/kde profile, which symlink.sh deliberately does not touch.
+# 3b. Pinned quickshell + Python venv — things the plain package lists cannot
+#     express.
 # ------------------------------------------------------------------
-if [[ $_do_desktop == true && "$_desktop" == "kde" ]]; then
-    step "KDE Plasma session"
-
-    # KWallet auto-unlock at login.
-    #
-    # Without this KDE asks for the wallet password on every login. The greeter's
-    # PAM stack already carries pam_gnome_keyring, but that only unlocks
-    # gnome-keyring — KWallet needs its own module, which ships in kwallet-pam
-    # (a plasma-meta dependency).
-    #
-    # It only works when the wallet password is the SAME as the login password.
-    # If the wallet was created with a different one, change it in
-    # KWalletManager -> Change Password.
-    #
-    # This edits the display manager's own PAM stack, so it has to follow whichever
-    # one is in use. SDDM is the current greeter; /etc/pam.d/greetd is still
-    # handled in case greetd is ever re-enabled as the fallback.
-    #
-    # force_run was REQUIRED with greetd: without it the module logged
-    #   "pam_kwallet5: not a graphical session, skipping"
-    # and never created /run/user/<uid>/kwallet5.socket, so kwalletd6 got
-    # DBus-activated later without the key and prompted for the password. SDDM
-    # does flag its session graphical, but force_run is harmless there and keeps
-    # both stacks identical.
-    for _pam_dm in /etc/pam.d/sddm /etc/pam.d/greetd; do
-        [[ -f "$_pam_dm" ]] || continue
-        if ! grep -q 'pam_kwallet5' "$_pam_dm"; then
-            info "Enabling KWallet auto-unlock (pam_kwallet5) in $_pam_dm..."
-            sudo sed -i '/^auth.*pam_gnome_keyring\.so/a auth       optional     pam_kwallet5.so' "$_pam_dm"
-            sudo sed -i '/^session.*pam_gnome_keyring\.so/a session    optional     pam_kwallet5.so auto_start force_run' "$_pam_dm"
-            success "pam_kwallet5 added to $_pam_dm"
-        elif grep -q 'pam_kwallet5.so auto_start$' "$_pam_dm"; then
-            info "Adding force_run to the existing pam_kwallet5 session line in $_pam_dm..."
-            sudo sed -i 's|^\(session.*pam_kwallet5\.so auto_start\)$|\1 force_run|' "$_pam_dm"
-        fi
-    done
-
-    info "Applying the KDE profile (dots/kde -> ~)..."
-    bash "$REPO_ROOT/cmd/lib/kde.sh" apply
-
-    # Make the new .desktop shortcut entries visible to kglobalaccel.
-    command -v kbuildsycoca6 &>/dev/null && kbuildsycoca6 --noincremental &>/dev/null || true
-
-    success "KDE configured — pick 'Plasma (Wayland)' at the login screen"
-fi
-
-# ------------------------------------------------------------------
-# 3c. Hyprland-specific: pinned quickshell + Python venv
-#     Runs only when Hyprland is the chosen desktop. Both pieces are things the
-#     plain package lists cannot express.
-# ------------------------------------------------------------------
-if [[ $_do_desktop == true && "$_desktop" == "hyprland" ]]; then
+if [[ $_do_desktop == true ]]; then
     step "Quickshell runtime (pinned build)"
 
     # quickshell is built from the commit end-4 pins, not from the AUR's
@@ -538,11 +447,10 @@ fi
 # 7. Dotfiles
 # ------------------------------------------------------------------
 if [[ $_do_dotfiles == true ]]; then
-    step "Dotfiles ($_desktop)"
+    step "Dotfiles"
     # Any real dir/file displaced by a symlink is saved as <name>.backup.TIMESTAMP.
-    # Undo with: setup dotfiles <hyprland|kde> --unlink
-    bash "$REPO_ROOT/cmd/lib/symlink.sh" "$_desktop"
-    success "Dotfiles linked  (undo: setup dotfiles $_desktop --unlink)"
+    bash "$REPO_ROOT/cmd/lib/symlink.sh"
+    success "Dotfiles linked  (undo: setup dotfiles --unlink)"
 fi
 
 # ------------------------------------------------------------------

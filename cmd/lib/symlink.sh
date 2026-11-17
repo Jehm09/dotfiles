@@ -1,24 +1,18 @@
 #!/usr/bin/env bash
 # Dynamic dotfiles symlink manager.
 #
-# Reads every entry (file or directory) inside the selected profiles' .config/
-# and creates a matching symlink in ~/.config/. Adding a new app config is as
-# simple as dropping its folder into a profile and re-running this script.
+# Reads every entry (file or directory) inside dots/common/.config and
+# dots/hyprland/.config and creates a matching symlink in ~/.config/. Adding a
+# new app config is as simple as dropping its folder into a profile and
+# re-running this script.
 #
-# DESKTOP CHOICE — required, no default
-#   hyprland   links  dots/common/  +  dots/hyprland/
-#   kde        links  dots/common/  only; the Plasma side is copy-managed and
-#              written separately by `setup kde apply` (cmd/lib/kde.sh), because
-#              KConfig rewrites its files at runtime and would clobber symlinks.
-#
-# dots/common/ is shared by both: kitty, fish, yazi, mpv, fastfetch, starship,
-# fontconfig and the browser/editor flag files — nothing tied to a compositor.
+# dots/common/ holds what is not tied to the compositor: kitty, fish, yazi, mpv,
+# fastfetch, starship, fontconfig, MangoHud and the browser/editor flag files.
 #
 # Usage:
-#   ./cmd/lib/symlink.sh hyprland      Link common + hyprland
-#   ./cmd/lib/symlink.sh kde           Link common  (then: setup kde apply)
-#   ./cmd/lib/symlink.sh kde --dry-run Preview, no changes
-#   ./cmd/lib/symlink.sh hyprland --unlink   Remove managed symlinks, restore backups
+#   ./cmd/lib/symlink.sh              Link common + hyprland
+#   ./cmd/lib/symlink.sh --dry-run    Preview, no changes
+#   ./cmd/lib/symlink.sh --unlink     Remove managed symlinks, restore backups
 
 set -Eeuo pipefail
 
@@ -28,30 +22,23 @@ TARGET_DIR="${XDG_CONFIG_HOME:-$HOME/.config}"
 
 DRY_RUN=false
 UNLINK=false
-DESKTOP=""
 
 _usage() {
     cat <<EOF
 
-Usage: setup dotfiles <hyprland|kde> [--dry-run] [--unlink]
+Usage: setup dotfiles [--dry-run] [--unlink]
 
-dots/common is linked either way — kitty, fish, fastfetch, yazi, mpv, starship,
-fontconfig and the browser/editor flag files. Nothing there is tied to a
-compositor, so both desktops get the same terminal and CLI setup.
-
-The argument only decides what is linked ON TOP of that:
-
-    hyprland    + the graphical side: hypr, quickshell, fuzzel, matugen,
-                  Kvantum, wlogout  (from the upstream clone, see setup upstream)
-    kde         + nothing here — Plasma is copy-managed, applied separately
-                  with 'setup kde apply'
+Links dots/common (kitty, fish, fastfetch, yazi, mpv, starship, fontconfig,
+MangoHud, browser/editor flags), dots/hyprland, and the graphical side from the
+upstream clone: hypr, quickshell, fuzzel, matugen, Kvantum, wlogout
+(see setup upstream).
 
 EOF
 }
 
 for arg in "$@"; do
     case "$arg" in
-        hyprland|kde) DESKTOP="$arg" ;;
+        hyprland)     ;;  # único escritorio; se acepta por compatibilidad
         --dry-run)    DRY_RUN=true   ;;
         --unlink)     UNLINK=true    ;;
         -h|--help)    _usage; exit 0 ;;
@@ -59,17 +46,7 @@ for arg in "$@"; do
     esac
 done
 
-if [[ -z "$DESKTOP" ]]; then
-    echo "ERROR: elige un escritorio — 'hyprland' o 'kde'."
-    _usage
-    exit 1
-fi
-
-# Build the list of source directories from the choice.
-case "$DESKTOP" in
-    hyprland) _profiles=(common hyprland) ;;
-    kde)      _profiles=(common)          ;;
-esac
+_profiles=(common hyprland)
 
 SOURCE_DIRS=()
 for p in "${_profiles[@]}"; do
@@ -98,10 +75,7 @@ UPSTREAM_LINK=(hypr fuzzel matugen Kvantum wlogout kde-material-you-colors)
 UPSTREAM_QS_SRC="quickshell/ii"
 UPSTREAM_QS_NAME="ii"
 
-USE_UPSTREAM=false
-[[ "$DESKTOP" == "hyprland" ]] && USE_UPSTREAM=true
-
-if [[ "$USE_UPSTREAM" == true && "$UNLINK" == false && ! -d "$UPSTREAM_CONFIG" ]]; then
+if [[ "$UNLINK" == false && ! -d "$UPSTREAM_CONFIG" ]]; then
     if [[ "$DRY_RUN" == true ]]; then
         echo "[dry-run] Falta el clon de upstream; se ejecutaría 'setup upstream sync'."
     else
@@ -110,8 +84,8 @@ if [[ "$USE_UPSTREAM" == true && "$UNLINK" == false && ! -d "$UPSTREAM_CONFIG" ]
     fi
 fi
 
-echo "Escritorio: $DESKTOP   (perfiles: ${_profiles[*]})"
-[[ "$USE_UPSTREAM" == true ]] && echo "Upstream:   $UPSTREAM_CACHE"
+echo "Perfiles: ${_profiles[*]}"
+echo "Upstream: $UPSTREAM_CACHE"
 [[ "$DRY_RUN" == true ]] && echo "[dry-run] No changes will be made."
 
 BACKUP_DIR="$TARGET_DIR/backup"
@@ -181,21 +155,14 @@ process_entry() {
     echo "[backed up] $entry_name  → backup/${entry_name}.${TIMESTAMP}"
 }
 
-# Owned by the KDE profile (dots/kde/, managed by cmd/lib/kde.sh with copies).
-# KConfig rewrites these at runtime and would clobber a symlink, so they must
-# never be linked from here. See dots/kde/files.list.
-KDE_OWNED=(kdeglobals dolphinrc)
-
 # Directories that must stay REAL directories in ~/.config, with their contents
 # symlinked file by file. Two reasons, one per entry:
 #
 #   systemd/user        holds runtime *.target.wants/ for enabled user services;
 #                       hijacking the whole directory would hide them.
-#   xdg-desktop-portal  Hyprland owns hyprland-portals.conf and KDE owns
-#                       kde-portals.conf. If this were a directory symlink into
-#                       the Hyprland profile, `setup kde apply` would write the
-#                       KDE file straight into dots/hyprland/. Keeping the
-#                       directory real lets both drop their own file side by side.
+#   xdg-desktop-portal  hyprland-portals.conf comes from upstream, but other
+#                       *-portals.conf can land here too; as a directory symlink
+#                       they would be written straight into the profile.
 #   fish                Split across profiles: config.fish, functions/, conf.d/ and
 #                       completions/ are in common, auto-Hypr.fish only in hyprland.
 #                       As a plain directory entry the second profile's symlink would
@@ -211,9 +178,7 @@ for _m in "${MERGE_DIRS[@]}"; do MERGE_TOPS+=("${_m%%/*}"); done
 # An earlier version of this script symlinked xdg-desktop-portal as a whole
 # directory. Turn any such leftover back into a real one before linking anything:
 # `mkdir -p` silently succeeds on a symlink-to-directory, so every file below
-# would end up written INTO the profile it points at. This runs regardless of the
-# chosen desktop — with kde the directory is not in any linked profile, but
-# `setup kde apply` still has to drop kde-portals.conf into a real directory.
+# would end up written INTO the profile it points at.
 # Only the link is removed; whatever it pointed at is left untouched.
 if [[ "$UNLINK" == false ]]; then
     for _rel in "${MERGE_DIRS[@]}"; do
@@ -239,10 +204,6 @@ for SOURCE_DIR in "${SOURCE_DIRS[@]}"; do
         [[ "$entry_name" == ".gitkeep" ]] && continue
         # Handled file-by-file further down — see MERGE_DIRS.
         [[ " ${MERGE_TOPS[*]} " == *" $entry_name "* ]] && continue
-        if [[ " ${KDE_OWNED[*]} " == *" $entry_name "* ]]; then
-            echo "[kde]       $entry_name  (gestionado por 'setup kde')"
-            continue
-        fi
         process_entry "$entry_name" "$SOURCE_DIR/$entry_name" "$TARGET_DIR/$entry_name"
     done
 
@@ -261,41 +222,38 @@ for SOURCE_DIR in "${SOURCE_DIRS[@]}"; do
 done
 
 # Upstream entries, linked from the cache clone rather than from this repo.
-if [[ "$USE_UPSTREAM" == true ]]; then
-    if [[ ! -d "$UPSTREAM_CONFIG" && "$UNLINK" == false ]]; then
-        echo "[skip]      upstream  (sin clon en $UPSTREAM_CACHE)"
-    else
-        for _name in "${UPSTREAM_LINK[@]}"; do
-            [[ -e "$UPSTREAM_CONFIG/$_name" || "$UNLINK" == true ]] || continue
-            process_entry "$_name" "$UPSTREAM_CONFIG/$_name" "$TARGET_DIR/$_name"
+if [[ ! -d "$UPSTREAM_CONFIG" && "$UNLINK" == false ]]; then
+    echo "[skip]      upstream  (sin clon en $UPSTREAM_CACHE)"
+else
+    for _name in "${UPSTREAM_LINK[@]}"; do
+        [[ -e "$UPSTREAM_CONFIG/$_name" || "$UNLINK" == true ]] || continue
+        process_entry "$_name" "$UPSTREAM_CONFIG/$_name" "$TARGET_DIR/$_name"
+    done
+
+    # ~/.config/quickshell stays a real directory so other quickshell configs
+    # can live beside ours; only the `prism` entry inside it is ours.
+    #
+    # Earlier versions linked the whole directory into this repo. `mkdir -p`
+    # silently succeeds on a symlink-to-directory, so leaving one in place
+    # would create `prism` inside the repo instead of in ~/.config. Same
+    # hazard the MERGE_DIRS fix above guards against.
+    if [[ "$UNLINK" == false && -L "$TARGET_DIR/quickshell" ]]; then
+        echo "[fixed]     quickshell  (era un symlink a $(readlink "$TARGET_DIR/quickshell"))"
+        [[ "$DRY_RUN" == false ]] && rm "$TARGET_DIR/quickshell"
+    fi
+    [[ "$DRY_RUN" == false && "$UNLINK" == false ]] && mkdir -p "$TARGET_DIR/quickshell"
+    process_entry "$UPSTREAM_QS_NAME" "$UPSTREAM_CONFIG/$UPSTREAM_QS_SRC" \
+        "$TARGET_DIR/quickshell/$UPSTREAM_QS_NAME"
+
+    # xdg-desktop-portal is a MERGE_DIR: link it file by file.
+    if [[ -d "$UPSTREAM_CONFIG/xdg-desktop-portal" ]]; then
+        [[ "$DRY_RUN" == false && "$UNLINK" == false ]] && mkdir -p "$TARGET_DIR/xdg-desktop-portal"
+        shopt -s nullglob
+        for _f in "$UPSTREAM_CONFIG"/xdg-desktop-portal/*; do
+            _n="$(basename "$_f")"
+            process_entry "$_n" "$_f" "$TARGET_DIR/xdg-desktop-portal/$_n"
         done
-
-        # ~/.config/quickshell stays a real directory so other quickshell configs
-        # can live beside ours; only the `prism` entry inside it is ours.
-        #
-        # Earlier versions linked the whole directory into this repo. `mkdir -p`
-        # silently succeeds on a symlink-to-directory, so leaving one in place
-        # would create `prism` inside the repo instead of in ~/.config. Same
-        # hazard the MERGE_DIRS fix above guards against.
-        if [[ "$UNLINK" == false && -L "$TARGET_DIR/quickshell" ]]; then
-            echo "[fixed]     quickshell  (era un symlink a $(readlink "$TARGET_DIR/quickshell"))"
-            [[ "$DRY_RUN" == false ]] && rm "$TARGET_DIR/quickshell"
-        fi
-        [[ "$DRY_RUN" == false && "$UNLINK" == false ]] && mkdir -p "$TARGET_DIR/quickshell"
-        process_entry "$UPSTREAM_QS_NAME" "$UPSTREAM_CONFIG/$UPSTREAM_QS_SRC" \
-            "$TARGET_DIR/quickshell/$UPSTREAM_QS_NAME"
-
-        # xdg-desktop-portal is a MERGE_DIR: Hyprland's file has to sit next to
-        # whatever KDE writes, so link it file by file.
-        if [[ -d "$UPSTREAM_CONFIG/xdg-desktop-portal" ]]; then
-            [[ "$DRY_RUN" == false && "$UNLINK" == false ]] && mkdir -p "$TARGET_DIR/xdg-desktop-portal"
-            shopt -s nullglob
-            for _f in "$UPSTREAM_CONFIG"/xdg-desktop-portal/*; do
-                _n="$(basename "$_f")"
-                process_entry "$_n" "$_f" "$TARGET_DIR/xdg-desktop-portal/$_n"
-            done
-            shopt -u nullglob
-        fi
+        shopt -u nullglob
     fi
 fi
 
@@ -306,5 +264,4 @@ elif [[ "$UNLINK" == true ]]; then
     echo "Unlink complete."
 else
     echo "Symlinks up to date."
-    [[ "$DESKTOP" == "kde" ]] && echo "Siguiente paso: ./setup kde apply"
 fi

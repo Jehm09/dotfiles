@@ -1,8 +1,6 @@
 # dotfiles
 
-Personal dotfiles for Arch Linux, with a choice of two desktops: **Hyprland +
-Quickshell** or **KDE Plasma 6**. Pick one at install time — every step follows
-from that choice.
+Personal dotfiles for Arch Linux with **Hyprland + Quickshell** as the desktop.
 
 ## How the Hyprland side works — read this first
 
@@ -26,9 +24,6 @@ So when end-4 improves the bar, fixes the notification popup or rewrites a
 widget, I get it by running one command — and I only look at whatever collides
 with my own changes. See [Upstream shell](#upstream-shell-end-4dots-hyprland).
 
-The KDE profile is unrelated to this and stays fully mine, copy-managed under
-`dots/kde/`.
-
 ## Quick install
 
 ### 1. From the Arch live ISO
@@ -47,18 +42,18 @@ never runs again. **Everything else is `setup post`, and it can be run whole, a
 step at a time, or re-run whenever you like.**
 
 ```bash
-./setup post --hyprland                  # pick steps in a menu
-./setup post --all --hyprland            # everything, no prompts
-./setup post --only greeter --hyprland   # just the login screen
-./setup post --skip apps,hwfix --kde     # everything but those two
+./setup post                      # pick steps in a menu
+./setup post --all                # everything, no prompts
+./setup post --only greeter       # just the login screen
+./setup post --skip apps,hwfix    # everything but those two
 ```
 
 Step names for `--only` / `--skip`: `multilib`, `aur`, `desktop`, `apps`,
 `greeter`, `hooks`, `dotfiles`, `shell`, `hwfix`. An unknown name is an error
 listing the valid ones, not a silent no-op.
 
-Without `--all`, `--only` or `--skip` it asks: desktop, then AUR helper, then
-login screen, then a checklist of the steps.
+Without `--all`, `--only` or `--skip` it asks: AUR helper, then login screen,
+then a checklist of the steps.
 
 ```
 ┌──────── Post-install — hyprland, sddm ─────────────────────┐
@@ -67,7 +62,7 @@ login screen, then a checklist of the steps.
 │                                                            │
 │   [*] multilib  1. base     [multilib] repo — Steam, 32-bit│
 │   [ ] aur       2. base     paru/yay — steps below use it  │
-│   [*] desktop   3. desktop  graphical stack — Hyprland/KDE │
+│   [*] desktop   3. desktop  graphical stack — Hyprland     │
 │   [*] apps      4. apps     browsers, editors, games       │
 │   [*] greeter   5. login    SDDM, or greetd + sysc-greet   │
 │   [*] hooks     6. system   pacman hooks from hooks/enabled│
@@ -94,44 +89,38 @@ dark through `NEWT_COLORS` in `cmd/lib/utils.sh`. When it is missing or stdin is
 a pipe, every menu falls back to a plain prompt, so nothing can wedge an
 automated run.
 
-**The desktop is a required choice.** There is no default and no fallback: the
-packages installed, the dotfiles linked and the session configured all follow
-from it. Without `--hyprland` or `--kde` the menu asks, and a non-interactive run
-without either stops.
+`--hyprland` is still accepted (it used to pick between Hyprland and KDE) but does
+nothing: Hyprland is the only desktop.
 
 | Step | What it does |
 |---|---|
 | `multilib` | Enables `[multilib]` for Steam and 32-bit apps |
 | `aur` | Installs yay, paru or both — steps 3+ install through it |
-| `desktop` | hyprland → `deps-hyprland.conf` + `deps-quickshell.conf`<br>kde → `deps-kde.conf`, plus the `dots/kde/` profile and the KWallet PAM hook |
+| `desktop` | `deps-hyprland.conf` + `deps-quickshell.conf`, the pinned quickshell build and the Python venv |
 | `apps` | `packages/apps.conf` (official + AUR) |
 | `greeter` | SDDM + `sddm-astronaut-theme`, or greetd + sysc-greet |
 | `hooks` | Hooks from `packages/hooks/enabled/` |
-| `dotfiles` | Symlinks for the chosen desktop |
+| `dotfiles` | Symlinks into `~/.config` |
 | `shell` | Sets fish as the login shell |
 | `hwfix` | Logitech mouse blacklist + initramfs rebuild |
 
 ### Dotfiles only
 
 ```bash
-./setup dotfiles hyprland              # dots/common + dots/hyprland
-./setup dotfiles kde                   # dots/common  (then: ./setup kde apply)
-./setup dotfiles kde --dry-run         # preview changes without applying them
-./setup dotfiles hyprland --unlink     # remove symlinks and restore backups
+./setup dotfiles                # dots/common + dots/hyprland + upstream
+./setup dotfiles --dry-run      # preview changes without applying them
+./setup dotfiles --unlink       # remove symlinks and restore backups
 ```
 
 #### Profiles
 
 | Profile | Contents | Managed by |
 |---|---|---|
-| `dots/common/` | kitty, fish, yazi, mpv, fastfetch, starship, fontconfig, darklyrc, browser/editor flags | symlink |
+| `dots/common/` | kitty, fish, yazi, mpv, fastfetch, starship, fontconfig, darklyrc, MangoHud, browser/editor flags | symlink |
 | `dots/hyprland/` | our own additions only: `settings/`, the systemd target, `auto-Hypr.fish` | symlink |
 | `overlay/hyprland/` | our delta on top of end-4's shell — hypr, quickshell, fuzzel, matugen, Kvantum, wlogout | rebuilt by `setup upstream`, then symlinked |
-| `dots/kde/` | the whole Plasma setup | **copy** (`setup kde`), never symlink |
 
-`common` is linked by both desktops; `hyprland` and `kde` are mutually exclusive.
-KDE is copy-managed because KConfig rewrites its files at runtime and would turn a
-symlink into a regular file — see the KDE section below.
+`common` holds what is not tied to the compositor; `hyprland` what is.
 
 The Hyprland/Quickshell code itself is **not** in this repo; see
 [Upstream shell](#upstream-shell-end-4dots-hyprland) below.
@@ -144,63 +133,8 @@ contents symlinked file by file, rather than being symlinked whole:
 | Directory | Why |
 |---|---|
 | `systemd/user` | holds runtime `*.target.wants/` for enabled user services |
-| `xdg-desktop-portal` | Hyprland owns `hyprland-portals.conf`, KDE owns `kde-portals.conf`; a directory symlink would make `setup kde apply` write the KDE file inside `dots/hyprland/` |
+| `xdg-desktop-portal` | `hyprland-portals.conf` comes from upstream, but other `*-portals.conf` can land here; a directory symlink would write them inside the profile |
 | `fish` | split across profiles — `config.fish`, `functions/`, `conf.d/`, `completions/` in `common`, `auto-Hypr.fish` in `hyprland`. As a plain entry the second profile would hide the first |
-
-### KDE Plasma profile
-
-Plasma is managed separately from the rest of the dotfiles, and by **copy rather
-than symlink**: KConfig rewrites its `*rc` files on every settings change and
-again on logout, using a write-temp-then-rename pattern that turns a symlink into
-a regular file. Which files are managed is declared in `dots/kde/files.list`.
-
-```bash
-./setup post --kde                  # full post-install with Plasma as the desktop
-./setup post --only desktop,dotfiles --kde   # just the packages + profile
-
-./setup kde apply      # repo -> ~   (backs up whatever it replaces)
-./setup kde save       # ~ -> repo   (run this after tweaking System Settings)
-./setup kde diff       # show what differs, change nothing
-./setup kde theme      # apply the appearance stack from dots/kde/theme.sh
-./setup kde apply --dry-run
-```
-
-The panel is built by hand, then captured as a whole file:
-
-```bash
-./setup kde panel             # live -> repo  (run after changing the panel)
-./setup kde panel --restore   # repo -> live  (stops plasmashell, then restarts)
-```
-
-It is kept out of `apply`/`save` because plasmashell owns
-`plasma-org.kde.plasma.desktop-appletsrc` and rewrites it from memory on exit, so
-a restore only sticks with plasmashell stopped. The file also carries every panel
-widget's configuration — including Panel Colorizer's ~55 kB `globalSettings` JSON —
-which is why it is copied whole rather than rebuilt by a script. `[ScreenMapping]`
-and `lastScreen=` inside it are machine-specific; see
-[dots/kde/VENDORED.md](dots/kde/VENDORED.md).
-
-### Reproducing this setup on another machine
-
-```bash
-./setup post --kde      # packages, dotfiles (common), profile, KWallet PAM hook
-./setup kde theme       # select the global theme, decoration, colours, cursor, icons
-./setup kde panel --restore
-```
-
-`setup post --kde` already runs `setup kde apply` (config, scripts, shortcuts,
-themes, icons — ~6200 files); the two steps above are the ones it does not.
-
-Theme assets are vendored under `dots/kde/.local/share/`; see
-[dots/kde/VENDORED.md](dots/kde/VENDORED.md) for provenance, the local
-modifications, and what was deliberately left out.
-
-Absolute home paths are stored as a `@HOME@` placeholder and substituted both
-ways, so the profile is portable across machines and users.
-
-Plasma and Hyprland can stay installed side by side — the greeter offers both
-sessions. `~/.config/kdeglobals` and `~/.config/dolphinrc` belong to this profile
-and are deliberately skipped by the symlink manager.
 
 ## Login screen
 
@@ -358,15 +292,10 @@ drift.
 ./setup                  Menu: post → tools → install
 ./setup install          Install Arch from the live ISO  (root)
 ./setup post             Interactive post-install setup
-./setup post --hyprland  Post-install with Hyprland as the desktop
-./setup post --kde       Post-install with KDE Plasma as the desktop
-./setup post --all --kde Post-install without prompting
-./setup post --only greeter --hyprland   Just one step
-./setup post --skip apps,hwfix --kde     All but those
-./setup dotfiles hyprland|kde   Link ~/.config for that desktop
-./setup kde apply|save|diff   KDE Plasma profile (copy-managed)
-./setup kde theme        Apply the appearance stack (dots/kde/theme.sh)
-./setup kde panel        Save the panel layout  (--restore to put it back)
+./setup post --all       Post-install without prompting
+./setup post --only greeter      Just one step
+./setup post --skip apps,hwfix   All but those
+./setup dotfiles         Link ~/.config
 ./setup greeter status   Which login screen is active, and what would break
 ./setup greeter sddm|greetd   Switch the login screen
 ./setup greeter apply    Re-apply the active greeter's config
@@ -394,8 +323,7 @@ dotfiles/
 │   │   ├── symlink.sh       Dotfiles symlink manager
 │   │   ├── upstream.sh      end-4/dots-hyprland overlay manager
 │   │   ├── greeter.sh       Login screen — SDDM or greetd
-│   │   ├── grub.sh          Boot menu console entry
-│   │   └── kde.sh           KDE Plasma profile manager (apply / save / diff)
+│   │   └── grub.sh          Boot menu console entry
 │   └── arch/
 │       ├── install.sh       Arch installer via archinstall
 │       ├── post-install.sh  Post-install setup
@@ -403,12 +331,8 @@ dotfiles/
 │           ├── user_configuration.json   archinstall config (kernel, locale, mirrors...)
 │           └── user_credentials.json     Encrypted credentials (argon2id)
 ├── dots/
-│   ├── common/.config/      Desktop-agnostic app configs — symlinked, both desktops
-│   ├── hyprland/.config/    Our own Hyprland-side additions only (settings/, systemd/, fish/)
-│   └── kde/                 KDE Plasma profile — copied to ~, mirrors $HOME
-│       ├── files.list       Which files the profile manages
-│       ├── .config/         kwinrc, kglobalshortcutsrc, kde/scripts/, ...
-│       └── .local/share/applications/   Shortcut .desktop files (X-KDE-Shortcuts)
+│   ├── common/.config/      Compositor-agnostic app configs — symlinked
+│   └── hyprland/.config/    Our own Hyprland-side additions only (settings/, systemd/, fish/)
 ├── overlay/hyprland/        Our delta on top of end-4/dots-hyprland
 │   ├── upstream.lock        The upstream commit the overlay applies to
 │   ├── remove.list          Upstream paths we delete (AI, waffle, gCloud, translations)
@@ -419,7 +343,6 @@ dotfiles/
     ├── apps.conf            User apps — official repos + an AUR-only section
     ├── deps-hyprland.conf   Hyprland WM + Wayland session tools
     ├── deps-quickshell.conf Quickshell runtime + widget backends
-    ├── deps-kde.conf        KDE Plasma desktop + Krohnkite tiling
     ├── deps-greeter-sddm.conf    SDDM + the astronaut login theme
     ├── deps-greeter-greetd.conf  greetd + sysc-greet (Hyprland)
     ├── requirements.txt     Python venv for the shell's helper scripts
@@ -468,38 +391,36 @@ snapshot archinstall then installs from.
 Runs as your user after the first boot, and **is the only thing you ever need to
 re-run** — `setup install` is one-off, everything else lives here. Steps are
 named and independently selectable with `--only` / `--skip`; without either you
-get a whiptail checklist. The desktop choice is required and has no default.
+get a whiptail checklist.
 
 | # | Step | What it does |
 |---|---|---|
 | 1 | Multilib | Uncomments `[multilib]` in `pacman.conf`, then `pacman -Sy` |
 | 2 | AUR helper | Installs paru (or yay) by cloning and `makepkg -si` |
-| 3 | Desktop packages | hyprland → `deps-hyprland.conf` + `deps-quickshell.conf`; kde → `deps-kde.conf` |
-| 3b | Plasma session | *(kde only)* KWallet PAM hook in the display manager's stack, then `setup kde apply` |
-| 3c | Quickshell | *(hyprland only)* `setup upstream deps` for the pinned build, then builds the Python venv from `requirements.txt` |
+| 3 | Desktop packages | `deps-hyprland.conf` + `deps-quickshell.conf` |
+| 3b | Quickshell | `setup upstream deps` for the pinned build, then builds the Python venv from `requirements.txt` |
 | 4 | Apps | Everything in `apps.conf`, AUR included, through paru/yay |
 | 5 | Login screen | Hands over to `cmd/lib/greeter.sh`: installs the packages, writes the config, adds the GRUB console entry, switches `display-manager.service` |
 | 6 | Pacman hooks | Copies `packages/hooks/enabled/*.hook` to `/etc/pacman.d/hooks` (currently empty; move one out of `disabled/` to activate it) |
-| 7 | Dotfiles | Calls `symlink.sh` for the chosen desktop |
+| 7 | Dotfiles | Calls `symlink.sh` |
 | 8 | Shell | `chsh` to fish |
 | 9 | Hardware fixes | Logitech module blacklist to `/etc/modprobe.d/`, rebuilds initramfs — what it is for and when to drop it: [docs/peripherals.md](docs/peripherals.md) |
 
 sudo is asked for once, after the flags are parsed, and kept alive for the rest
-of the run — so `--help` and the desktop validation never prompt.
+of the run — so `--help` never prompts.
 
-### `cmd/lib/symlink.sh` — `setup dotfiles <hyprland|kde>`
+### `cmd/lib/symlink.sh` — `setup dotfiles`
 Builds `~/.config` out of two sources.
 
-1. **Pick the profiles** — `hyprland` → `dots/common` + `dots/hyprland`;
-   `kde` → `dots/common` only.
-2. **Sync upstream if missing** — for hyprland, runs `setup upstream sync` when
-   there is no clone yet.
+1. **Profiles** — `dots/common` + `dots/hyprland`.
+2. **Sync upstream if missing** — runs `setup upstream sync` when there is no
+   clone yet.
 3. **Repair leftovers** — any `MERGE_DIRS` entry (or `~/.config/quickshell`) that
    is a stale directory symlink gets turned back into a real directory. `mkdir -p`
    succeeds silently on a symlink-to-directory, so without this every file below
    would be written *into* the repo.
-4. **Link the repo entries** — one symlink per entry, skipping `KDE_OWNED`
-   (`kdeglobals`, `dolphinrc`: KConfig rewrites them) and the `MERGE_DIRS` tops.
+4. **Link the repo entries** — one symlink per entry, skipping the `MERGE_DIRS`
+   tops.
 5. **Link the merge directories** — `systemd/user`, `xdg-desktop-portal` and
    `fish` stay real directories, linked file by file.
 6. **Link the upstream entries** — only what is in `UPSTREAM_LINK`, plus
@@ -529,13 +450,6 @@ Manages end-4's code as an overlay. Detailed in the section below; in short:
 `sync` (clone + rebuild), `apply` (rebuild only), `update` (fetch + merge),
 `export` (clone → `overlay/`), `deps` (pinned quickshell), `status`.
 
-### `cmd/lib/kde.sh` — `setup kde <apply|save|diff|theme|panel>`
-The Plasma profile, managed by copy because KConfig would clobber symlinks.
-`files.list` declares what is managed, `render()` swaps absolute home paths for a
-`@HOME@` placeholder in both directions, and `_is_text` (`grep -Iq .`) keeps
-binaries out of the substitution. The panel is handled separately because
-plasmashell rewrites its file from memory on exit.
-
 ## Upstream shell (end-4/dots-hyprland)
 
 ### Where the code lives
@@ -549,8 +463,7 @@ dotfiles/                               ~/.local/share/dotfiles/upstream/
 │   ├── files/         13 of mine   ──┐     ├── quickshell/ii/
 │   ├── remove.list    219 deletions  │     ├── fuzzel/ matugen/ Kvantum/ …
 │   └── local.ignore   per-machine    │     └── kitty/ foot/ fish/  ← never linked
-├── dots/common/                       │
-└── dots/kde/                          │  branches: base = end-4 untouched
+└── dots/common/                       │  branches: base = end-4 untouched
                                        │            mine = base + my overlay
      setup upstream sync  ─────────────┘
 ```
@@ -678,12 +591,12 @@ compare that file against `sdata/uv/requirements.in` in the clone.
 ## Adding an app config
 
 Drop its folder into the profile it belongs to and re-run `setup dotfiles`. Use
-`common/` unless the config only makes sense under one desktop:
+`common/` unless the config only makes sense under Hyprland:
 
 ```bash
 mkdir -p dots/common/.config/nvim
 # copy or create your config files in dots/common/.config/nvim/
-./setup dotfiles hyprland     # or: ./setup dotfiles kde
+./setup dotfiles
 ```
 
 If the same directory name exists in both `common` and `hyprland`, add it to
@@ -761,5 +674,5 @@ it from [his repository](https://github.com/end-4/dots-hyprland) — and conside
 [sponsoring him](https://github.com/sponsors/end-4).
 
 The rest — the Arch installer, the package lists, the symlink and overlay
-managers, the KDE profile — is mine.
+managers — is mine.
 
