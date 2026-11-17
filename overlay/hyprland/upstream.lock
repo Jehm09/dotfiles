@@ -1,3 +1,3 @@
 # Upstream commit this overlay applies to. Managed by 'setup upstream export'.
 url=https://github.com/end-4/dots-hyprland.git
-commit=cb1c428bf841dabccff1b126904047c28e89ba8c
+commit=21733c3ca7f4edc20faafedea844dc96002c6f7f
