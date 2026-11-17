@@ -1,17 +1,25 @@
 diff --git a/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/CalendarWidget.qml b/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/CalendarWidget.qml
-index 002a9e31..65c58297 100644
+index 002a9e31..187f5a18 100644
 --- a/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/CalendarWidget.qml
 +++ b/dots/.config/quickshell/ii/modules/ii/sidebarRight/calendar/CalendarWidget.qml
-@@ -11,6 +11,8 @@ Item {
+@@ -9,8 +9,15 @@ Item {
+     // Layout.topMargin: 10
+     anchors.topMargin: 10
      property int monthShift: 0
-     property var viewingDate: CalendarLayout.getDateInXMonthsTime(monthShift)
+-    property var viewingDate: CalendarLayout.getDateInXMonthsTime(monthShift)
++    // new Date() no es reactivo: sin depender de DateTime.date (cambia una vez por día, también al volver de
++    // suspensión) el "hoy" quedaba congelado en el día en que se creó el widget
++    property var viewingDate: {
++        DateTime.date;
++        return CalendarLayout.getDateInXMonthsTime(monthShift);
++    }
      property var calendarLayout: CalendarLayout.getCalendarLayout(viewingDate, monthShift === 0)
 +    onViewingDateChanged: Holidays.ensureYear(viewingDate.getFullYear())
 +    Component.onCompleted: Holidays.ensureYear(viewingDate.getFullYear())
      width: calendarColumn.width
      implicitHeight: calendarColumn.height + 10 * 2
  
-@@ -114,6 +116,7 @@ Item {
+@@ -114,6 +121,7 @@ Item {
                      delegate: CalendarDayButton {
                          day: calendarLayout[modelData][index].day
                          isToday: calendarLayout[modelData][index].today
